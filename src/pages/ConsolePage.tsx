@@ -169,47 +169,47 @@ export function ConsolePage() {
    * In push-to-talk mode, start recording
    * .appendInputAudio() for each sample
    */
-  const startRecording = async () => {
-    setIsRecording(true);
-    const client = clientRef.current;
-    const wavRecorder = wavRecorderRef.current;
-    const wavStreamPlayer = wavStreamPlayerRef.current;
-    const trackSampleOffset = await wavStreamPlayer.interrupt();
-    if (trackSampleOffset?.trackId) {
-      const { trackId, offset } = trackSampleOffset;
-      await client.cancelResponse(trackId, offset);
-    }
-    await wavRecorder.record((data) => client.appendInputAudio(data.mono));
-  };
+  // const startRecording = async () => {
+  //   setIsRecording(true);
+  //   const client = clientRef.current;
+  //   const wavRecorder = wavRecorderRef.current;
+  //   const wavStreamPlayer = wavStreamPlayerRef.current;
+  //   const trackSampleOffset = await wavStreamPlayer.interrupt();
+  //   if (trackSampleOffset?.trackId) {
+  //     const { trackId, offset } = trackSampleOffset;
+  //     await client.cancelResponse(trackId, offset);
+  //   }
+  //   await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+  // };
 
-  /**
-   * In push-to-talk mode, stop recording
-   */
-  const stopRecording = async () => {
-    setIsRecording(false);
-    const client = clientRef.current;
-    const wavRecorder = wavRecorderRef.current;
-    await wavRecorder.pause();
-    client.createResponse();
-  };
+  // /**
+  //  * In push-to-talk mode, stop recording
+  //  */
+  // const stopRecording = async () => {
+  //   setIsRecording(false);
+  //   const client = clientRef.current;
+  //   const wavRecorder = wavRecorderRef.current;
+  //   await wavRecorder.pause();
+  //   client.createResponse();
+  // };
 
-  /**
-   * Switch between Manual <> VAD mode for communication
-   */
-  const changeTurnEndType = async (value: string) => {
-    const client = clientRef.current;
-    const wavRecorder = wavRecorderRef.current;
-    if (value === 'none' && wavRecorder.getStatus() === 'recording') {
-      await wavRecorder.pause();
-    }
-    client.updateSession({
-      turn_detection: value === 'none' ? null : { type: 'server_vad' },
-    });
-    if (value === 'server_vad' && client.isConnected()) {
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
-    }
-    setCanPushToTalk(value === 'none');
-  };
+  // /**
+  //  * Switch between Manual <> VAD mode for communication
+  //  */
+  // const changeTurnEndType = async (value: string) => {
+  //   const client = clientRef.current;
+  //   const wavRecorder = wavRecorderRef.current;
+  //   if (value === 'none' && wavRecorder.getStatus() === 'recording') {
+  //     await wavRecorder.pause();
+  //   }
+  //   client.updateSession({
+  //     turn_detection: value === 'none' ? null : { type: 'server_vad' },
+  //   });
+  //   if (value === 'server_vad' && client.isConnected()) {
+  //     await wavRecorder.record((data) => client.appendInputAudio(data.mono));
+  //   }
+  //   setCanPushToTalk(value === 'none');
+  // };
 
   /**
    * Auto-scroll the event logs
@@ -322,6 +322,8 @@ export function ConsolePage() {
     client.updateSession({ instructions: instructions });
     // Set transcription, otherwise we don't get user transcriptions back
     client.updateSession({ input_audio_transcription: { model: 'whisper-1' } });
+    // Set turn detection to server VAD
+    client.updateSession({ turn_detection: { type: 'server_vad' } })
 
     // handle realtime events from client + server for event logging
     client.on('realtime.event', (realtimeEvent: RealtimeEvent) => {
@@ -458,22 +460,22 @@ export function ConsolePage() {
             </div>
           </div>
           <div className="content-actions">
-            <Toggle
-              defaultValue={false}
-              labels={['manual', 'vad']}
-              values={['none', 'server_vad']}
-              onChange={(_, value) => changeTurnEndType(value)}
-            />
-            <div className="spacer" />
-            {isConnected && canPushToTalk && (
-              <Button
-                label={isRecording ? 'release to send' : 'push to talk'}
-                buttonStyle={isRecording ? 'alert' : 'regular'}
-                disabled={!isConnected || !canPushToTalk}
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-              />
-            )}
+            {/*<Toggle*/}
+            {/*  defaultValue={false}*/}
+            {/*  labels={['manual', 'vad']}*/}
+            {/*  values={['none', 'server_vad']}*/}
+            {/*  onChange={(_, value) => changeTurnEndType(value)}*/}
+            {/*/>*/}
+            {/*<div className="spacer" />*/}
+            {/*{isConnected && canPushToTalk && (*/}
+            {/*  <Button*/}
+            {/*    label={isRecording ? 'release to send' : 'push to talk'}*/}
+            {/*    buttonStyle={isRecording ? 'alert' : 'regular'}*/}
+            {/*    disabled={!isConnected || !canPushToTalk}*/}
+            {/*    onMouseDown={startRecording}*/}
+            {/*    onMouseUp={stopRecording}*/}
+            {/*  />*/}
+            {/*)}*/}
             <div className="spacer" />
             <Button
               label={isConnected ? 'disconnect' : 'connect'}
@@ -484,6 +486,7 @@ export function ConsolePage() {
                 isConnected ? disconnectConversation : connectConversation
               }
             />
+            <div className="spacer" />
           </div>
         </div>
       </div>
