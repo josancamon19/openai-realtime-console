@@ -166,67 +166,6 @@ export function ConsolePage() {
   }, []);
 
   /**
-   * In push-to-talk mode, start recording
-   * .appendInputAudio() for each sample
-   */
-  // const startRecording = async () => {
-  //   setIsRecording(true);
-  //   const client = clientRef.current;
-  //   const wavRecorder = wavRecorderRef.current;
-  //   const wavStreamPlayer = wavStreamPlayerRef.current;
-  //   const trackSampleOffset = await wavStreamPlayer.interrupt();
-  //   if (trackSampleOffset?.trackId) {
-  //     const { trackId, offset } = trackSampleOffset;
-  //     await client.cancelResponse(trackId, offset);
-  //   }
-  //   await wavRecorder.record((data) => client.appendInputAudio(data.mono));
-  // };
-
-  // /**
-  //  * In push-to-talk mode, stop recording
-  //  */
-  // const stopRecording = async () => {
-  //   setIsRecording(false);
-  //   const client = clientRef.current;
-  //   const wavRecorder = wavRecorderRef.current;
-  //   await wavRecorder.pause();
-  //   client.createResponse();
-  // };
-
-  // /**
-  //  * Switch between Manual <> VAD mode for communication
-  //  */
-  // const changeTurnEndType = async (value: string) => {
-  //   const client = clientRef.current;
-  //   const wavRecorder = wavRecorderRef.current;
-  //   if (value === 'none' && wavRecorder.getStatus() === 'recording') {
-  //     await wavRecorder.pause();
-  //   }
-  //   client.updateSession({
-  //     turn_detection: value === 'none' ? null : { type: 'server_vad' },
-  //   });
-  //   if (value === 'server_vad' && client.isConnected()) {
-  //     await wavRecorder.record((data) => client.appendInputAudio(data.mono));
-  //   }
-  //   setCanPushToTalk(value === 'none');
-  // };
-
-  /**
-   * Auto-scroll the event logs
-   */
-  // useEffect(() => {
-  //   if (eventsScrollRef.current) {
-  //     const eventsEl = eventsScrollRef.current;
-  //     const scrollHeight = eventsEl.scrollHeight;
-  //     // Only scroll if height has just changed
-  //     if (scrollHeight !== eventsScrollHeightRef.current) {
-  //       eventsEl.scrollTop = scrollHeight;
-  //       eventsScrollHeightRef.current = scrollHeight;
-  //     }
-  //   }
-  // }, [realtimeEvents]);
-
-  /**
    * Auto-scroll the conversation logs
    */
   useEffect(() => {
