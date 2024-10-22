@@ -100,7 +100,7 @@ export class WavStreamPlayer {
    * @param {string} [trackId]
    * @returns {Int16Array}
    */
-  add16BitPCM(arrayBuffer, trackId = 'default') {
+  add16BitPCM(arrayBuffer, trackId = 'default', playbackSpeed = 1) {
     if (typeof trackId !== 'string') {
       throw new Error(`trackId must be a string`);
     } else if (this.interruptedTrackIds[trackId]) {
@@ -117,10 +117,20 @@ export class WavStreamPlayer {
     } else {
       throw new Error(`argument must be Int16Array or ArrayBuffer`);
     }
+
+    // Adjust playback speed by downsampling the buffer
+    if (playbackSpeed !== 1.0) {
+      const newLength = Math.floor(buffer.length / playbackSpeed);
+      const adjustedBuffer = new Int16Array(newLength);
+      for (let i = 0; i < newLength; i++) {
+        adjustedBuffer[i] = buffer[Math.floor(i * playbackSpeed)];
+      }
+      buffer = adjustedBuffer;
+    }
+
     this.stream.port.postMessage({ event: 'write', buffer, trackId });
     return buffer;
   }
-
   /**
    * Gets the offset (sample count) of the currently playing stream
    * @param {boolean} [interrupt]
