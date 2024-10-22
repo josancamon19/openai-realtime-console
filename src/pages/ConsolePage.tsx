@@ -15,11 +15,12 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 
 import { RealtimeClient } from '@openai/realtime-api-beta';
 import { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
+// noinspection ES6PreferShortImport
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
-import { X, Edit, Zap, ArrowUp, ArrowDown } from 'react-feather';
+import { X, Edit, Zap } from 'react-feather';
 import { Button } from '../components/button/Button';
 import { Toggle } from '../components/toggle/Toggle';
 
@@ -80,8 +81,6 @@ export function ConsolePage() {
    */
   const clientCanvasRef = useRef<HTMLCanvasElement>(null);
   const serverCanvasRef = useRef<HTMLCanvasElement>(null);
-  const eventsScrollHeightRef = useRef(0);
-  const eventsScrollRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<string>(new Date().toISOString());
 
   /**
@@ -91,15 +90,10 @@ export function ConsolePage() {
    * - memoryKv is for set_memory() function
    */
   const [items, setItems] = useState<ItemType[]>([]);
-  const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
-  // const [expandedEvents, setExpandedEvents] = useState<{
-  //   [key: string]: boolean;
-  // }>({});
+  const [_, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [canPushToTalk, setCanPushToTalk] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
-  const [memoryKv, setMemoryKv] = useState<{ [key: string]: any }>({});
-  const [learnedItems, setLearnedItems] = useState<string[]>([]);
 
   /**
    * When you click the API key
@@ -154,9 +148,7 @@ export function ConsolePage() {
    */
   const disconnectConversation = useCallback(async () => {
     setIsConnected(false);
-    // setRealtimeEvents([]);
     setItems([]);
-    setMemoryKv({});
 
     const client = clientRef.current;
     client.disconnect();
@@ -331,30 +323,6 @@ export function ConsolePage() {
     // Set transcription, otherwise we don't get user transcriptions back
     client.updateSession({ input_audio_transcription: { model: 'whisper-1' } });
 
-    // Add tools
-    client.addTool(
-      {
-        name: 'save_learned_fact',
-        description: 'Save a fact that was learned during the conversation',
-        parameters: {
-          type: 'object',
-          properties: {
-            value: {
-              type: 'string',
-              description: 'The fact to save',
-            },
-          },
-          required: ['value'],
-        },
-      },
-      async ({ value }: { [value: string]: any }) => {
-        setLearnedItems((learnedItems) => {
-          return learnedItems.concat(value);
-        });
-        return { ok: true };
-      }
-    );
-
     // handle realtime events from client + server for event logging
     client.on('realtime.event', (realtimeEvent: RealtimeEvent) => {
       setRealtimeEvents((realtimeEvents) => {
@@ -516,14 +484,6 @@ export function ConsolePage() {
                 isConnected ? disconnectConversation : connectConversation
               }
             />
-          </div>
-        </div>
-        <div className="content-right">
-          <div className="content-block kv">
-            <div className="content-block-title">save_learned_fact()</div>
-            <div className="content-block-body content-kv">
-              {JSON.stringify(learnedItems, null, 2)}
-            </div>
           </div>
         </div>
       </div>
