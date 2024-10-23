@@ -43,8 +43,8 @@ export function ConsolePage() {
   const apiKey = LOCAL_RELAY_SERVER_URL
     ? ''
     : localStorage.getItem('tmp::voice_api_key') ||
-      prompt('OpenAI API Key') ||
-      '';
+    prompt('OpenAI API Key') ||
+    '';
   if (apiKey !== '') {
     localStorage.setItem('tmp::voice_api_key', apiKey);
   }
@@ -62,14 +62,10 @@ export function ConsolePage() {
     new WavStreamPlayer({ sampleRate: 24000 })
   );
   const clientRef = useRef<RealtimeClient>(
-    new RealtimeClient(
-      LOCAL_RELAY_SERVER_URL
-        ? { url: LOCAL_RELAY_SERVER_URL }
-        : {
-            apiKey: apiKey,
-            dangerouslyAllowAPIKeyInBrowser: true,
-          }
-    )
+    new RealtimeClient({
+      apiKey: apiKey,
+      dangerouslyAllowAPIKeyInBrowser: true,
+    })
   );
 
   /**
@@ -133,9 +129,31 @@ export function ConsolePage() {
       },
     ]);
 
-    if (client.getTurnDetectionType() === 'server_vad') {
-      await wavRecorder.record((data) => client.appendInputAudio(data.mono));
-    }
+    const recordAudio = async () => {
+      await wavRecorder.record(async (data) => {
+        try {
+          client.appendInputAudio(data.mono);
+        } catch (error) {
+          console.error('Error appending input audio:', error);
+          console.log('Client state:', { isConnected: client.isConnected() });
+          console.log('Reinitializing client and reconnecting...');
+
+          // Finish current wav recorder
+          await wavRecorder.end();
+
+          // Create a new client
+          clientRef.current = new RealtimeClient({
+            apiKey: apiKey,
+            dangerouslyAllowAPIKeyInBrowser: true,
+          });
+
+          // Call connectConversation again
+          await connectConversation();
+        }
+      });
+    };
+
+    await recordAudio();
   }, []);
 
   /**
@@ -312,7 +330,7 @@ export function ConsolePage() {
     <div data-component="ConsolePage">
       <div className="content-top">
         <div className="content-title">
-          <img src="/openai-logomark.svg"  alt=""/>
+          <img src="/openai-logomark.svg" alt="" />
           <span>realtime console</span>
         </div>
         <div className="content-api-key">
@@ -370,7 +388,7 @@ export function ConsolePage() {
                               (conversationItem.formatted.audio?.length
                                 ? '(awaiting transcript)'
                                 : conversationItem.formatted.text ||
-                                  '(item sent)')}
+                                '(item sent)')}
                           </div>
                         )}
                       {!conversationItem.formatted.tool &&
@@ -381,7 +399,7 @@ export function ConsolePage() {
                               '(truncated)'}
                           </div>
                         )}
-                        
+
                       {conversationItem.formatted.file && conversationItem.role === 'assistant' && (
                         <audio
                           src={conversationItem.formatted.file.url}
