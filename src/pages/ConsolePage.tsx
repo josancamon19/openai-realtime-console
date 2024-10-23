@@ -1,16 +1,3 @@
-/**
- * Running a local relay server will allow you to hide your API key
- * and run custom logic on the server
- *
- * Set the local relay server address to:
- * REACT_APP_LOCAL_RELAY_SERVER_URL=http://localhost:8081
- *
- * This will also require you to set OPENAI_API_KEY= in a `.env` file
- * You can run it with `npm run relay`, in parallel with `npm start`
- */
-const LOCAL_RELAY_SERVER_URL: string =
-  process.env.REACT_APP_LOCAL_RELAY_SERVER_URL || '';
-
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 import { RealtimeClient } from '@openai/realtime-api-beta';
@@ -36,18 +23,7 @@ interface RealtimeEvent {
 }
 
 export function ConsolePage() {
-  /**
-   * Ask user for API Key
-   * If we're using the local relay server, we don't need this
-   */
-  const apiKey = LOCAL_RELAY_SERVER_URL
-    ? ''
-    : localStorage.getItem('tmp::voice_api_key') ||
-    prompt('OpenAI API Key') ||
-    '';
-  if (apiKey !== '') {
-    localStorage.setItem('tmp::voice_api_key', apiKey);
-  }
+  const apiKey = localStorage.getItem('tmp::voice_api_key') || '';
 
   /**
    * Instantiate:
@@ -192,76 +168,6 @@ export function ConsolePage() {
   }, [items]);
 
   /**
-   * Set up render loops for the visualization canvas
-   */
-  useEffect(() => {
-    let isLoaded = true;
-
-    const wavRecorder = wavRecorderRef.current;
-    const clientCanvas = clientCanvasRef.current;
-    let clientCtx: CanvasRenderingContext2D | null = null;
-
-    const wavStreamPlayer = wavStreamPlayerRef.current;
-    const serverCanvas = serverCanvasRef.current;
-    let serverCtx: CanvasRenderingContext2D | null = null;
-
-    const render = () => {
-      if (isLoaded) {
-        if (clientCanvas) {
-          if (!clientCanvas.width || !clientCanvas.height) {
-            clientCanvas.width = clientCanvas.offsetWidth;
-            clientCanvas.height = clientCanvas.offsetHeight;
-          }
-          clientCtx = clientCtx || clientCanvas.getContext('2d');
-          if (clientCtx) {
-            clientCtx.clearRect(0, 0, clientCanvas.width, clientCanvas.height);
-            const result = wavRecorder.recording
-              ? wavRecorder.getFrequencies('voice')
-              : { values: new Float32Array([0]) };
-            WavRenderer.drawBars(
-              clientCanvas,
-              clientCtx,
-              result.values,
-              '#0099ff',
-              10,
-              0,
-              8
-            );
-          }
-        }
-        if (serverCanvas) {
-          if (!serverCanvas.width || !serverCanvas.height) {
-            serverCanvas.width = serverCanvas.offsetWidth;
-            serverCanvas.height = serverCanvas.offsetHeight;
-          }
-          serverCtx = serverCtx || serverCanvas.getContext('2d');
-          if (serverCtx) {
-            serverCtx.clearRect(0, 0, serverCanvas.width, serverCanvas.height);
-            const result = wavStreamPlayer.analyser
-              ? wavStreamPlayer.getFrequencies('voice')
-              : { values: new Float32Array([0]) };
-            WavRenderer.drawBars(
-              serverCanvas,
-              serverCtx,
-              result.values,
-              '#009900',
-              10,
-              0,
-              8
-            );
-          }
-        }
-        window.requestAnimationFrame(render);
-      }
-    };
-    render();
-
-    return () => {
-      isLoaded = false;
-    };
-  }, []);
-
-  /**
    * Core RealtimeClient and audio capture setup
    * Set all of our instructions, tools, events and more
    */
@@ -300,6 +206,7 @@ export function ConsolePage() {
     });
     client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
+      // TODO: why is it retrieving items every time? why not append item?
       // console.log({items});
       if (delta?.audio) {
         wavStreamPlayer.add16BitPCM(delta.audio, item.id);
@@ -334,15 +241,13 @@ export function ConsolePage() {
           <span>realtime console</span>
         </div>
         <div className="content-api-key">
-          {!LOCAL_RELAY_SERVER_URL && (
-            <Button
-              icon={Edit}
-              iconPosition="end"
-              buttonStyle="flush"
-              label={`api key: ${apiKey.slice(0, 3)}...`}
-              onClick={() => resetAPIKey()}
-            />
-          )}
+          <Button
+            icon={Edit}
+            iconPosition="end"
+            buttonStyle="flush"
+            label={`api key: ${apiKey.slice(0, 3)}...`}
+            onClick={() => resetAPIKey()}
+          />
         </div>
       </div>
       <div className="content-main">
