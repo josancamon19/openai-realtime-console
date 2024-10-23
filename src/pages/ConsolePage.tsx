@@ -60,7 +60,38 @@ export function ConsolePage() {
    * - realtimeEvents are event logs, which can be expanded
    * - memoryKv is for set_memory() function
    */
-  const [items, setItems] = useState<ItemType[]>([]);
+  // Hook to manage local storage
+  function useLocalStorage<T>(key: string, initialValue: T) {
+    const [storedValue, setStoredValue] = useState<T>(() => {
+      try {
+        const item = window.localStorage.getItem(key);
+        return item ? JSON.parse(item) : initialValue;
+      } catch (error) {
+        console.error('Error reading localStorage key:', key, error);
+        return initialValue;
+      }
+    });
+
+    const setValue = (value: T | ((val: T) => T)) => {
+      try {
+        const valueToStore = value instanceof Function ? value(storedValue) : value;
+        setStoredValue(valueToStore);
+        window.localStorage.setItem(key, JSON.stringify(valueToStore));
+      } catch (error) {
+        console.error('Error setting localStorage key:', key, error);
+      }
+    };
+
+    return [storedValue, setValue] as const;
+  }
+
+  const [items, setItems] = useLocalStorage<ItemType[]>('items',[]);
+  // Cached items with "role" and "text" value
+  const [cachedItems, setCachedItems] = useLocalStorage<{ id: string; role: string; text: string }[]>(
+    'cachedItems',
+    []
+  );
+
   const [_, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -116,6 +147,8 @@ export function ConsolePage() {
 
           // Finish current wav recorder
           await wavRecorder.end();
+          await wavStreamPlayer.interrupt();
+          console.log('Interrupted wavStreamPlayer');
 
           // Create a new client
           clientRef.current = new RealtimeClient({
@@ -125,6 +158,7 @@ export function ConsolePage() {
 
           // Call connectConversation again
           await connectConversation();
+          console.log('Reconnected client');
         }
       });
     };
@@ -154,6 +188,26 @@ export function ConsolePage() {
     client.deleteItem(id);
   }, []);
 
+  const addAssistantMessageContent = (text: string) => {
+    clientRef.current.realtime.send('conversation.item.create', {
+      item: {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: text }],
+      },
+    });
+  }
+
+  const addUserMessageContent = (text: string) => {
+    clientRef.current.realtime.send('conversation.item.create', {
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: text }],
+      },
+    });
+  }
+
   /**
    * Auto-scroll the conversation logs
    */
@@ -167,14 +221,7 @@ export function ConsolePage() {
     }
   }, [items]);
 
-  /**
-   * Core RealtimeClient and audio capture setup
-   * Set all of our instructions, tools, events and more
-   */
-  useEffect(() => {
-    // Get refs
-    const wavStreamPlayer = wavStreamPlayerRef.current;
-    const client = clientRef.current;
+  const setupSession = (client: RealtimeClient, wavStreamPlayer: WavStreamPlayer) => {
 
     // Set instructions
     client.updateSession({ instructions: instructions });
@@ -196,6 +243,7 @@ export function ConsolePage() {
         }
       });
     });
+
     client.on('error', (event: any) => console.error(event));
     client.on('conversation.interrupted', async () => {
       const trackSampleOffset = await wavStreamPlayer.interrupt();
@@ -204,10 +252,10 @@ export function ConsolePage() {
         await client.cancelResponse(trackId, offset);
       }
     });
+
     client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
-      // TODO: why is it retrieving items every time? why not append item?
-      // console.log({items});
+      // console.log({ items });
       if (delta?.audio) {
         wavStreamPlayer.add16BitPCM(delta.audio, item.id);
       }
@@ -220,9 +268,39 @@ export function ConsolePage() {
         item.formatted.file = wavFile;
       }
       setItems(items);
+      setCachedItems((prevItems: { id: string; role: string; text: string }[]) => {
+        const updatedItems = items.reduce((acc, currentItem) => {
+          const index = acc.findIndex(item => item.id === currentItem.id);
+          if (index !== -1) {
+            acc[index] = {
+              id: currentItem.id,
+              role: currentItem.role!,
+              text: currentItem.formatted.transcript ? currentItem.formatted.transcript : currentItem.formatted.text || ''
+            }; // Replace existing item with the same id
+          } else {
+            acc.push({
+              id: currentItem.id,
+              role: currentItem.role!,
+              text: currentItem.formatted.transcript ? currentItem.formatted.transcript : currentItem.formatted.text || ''
+            }); // Add new item
+          }
+          return acc;
+        }, [...prevItems]); // Start with previous items
+        return updatedItems;
+      });
     });
 
     setItems(client.conversation.getItems());
+  }
+
+  /**
+   * Core RealtimeClient and audio capture setup
+   * Set all of our instructions, tools, events and more
+   */
+  useEffect(() => {
+    const wavStreamPlayer = wavStreamPlayerRef.current;
+    const client = clientRef.current;
+    setupSession(client, wavStreamPlayer);
 
     return () => {
       // cleanup; resets to defaults
