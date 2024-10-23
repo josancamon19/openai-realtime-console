@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 
-import { RealtimeClient } from '@openai/realtime-api-beta';
+import { RealtimeClient, RealtimeUtils } from '@openai/realtime-api-beta';
 import { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
 // noinspection ES6PreferShortImport
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
@@ -20,6 +20,30 @@ interface RealtimeEvent {
   source: 'client' | 'server';
   count?: number;
   event: { [key: string]: any };
+}
+
+function useLocalStorage<T>(key: string, initialValue: T) {
+  const [storedValue, setStoredValue] = useState<T>(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      console.error('Error reading localStorage key:', key, error);
+      return initialValue;
+    }
+  });
+
+  const setValue = (value: T | ((val: T) => T)) => {
+    try {
+      const valueToStore = value instanceof Function ? value(storedValue) : value;
+      setStoredValue(valueToStore);
+      window.localStorage.setItem(key, JSON.stringify(valueToStore));
+    } catch (error) {
+      console.error('Error setting localStorage key:', key, error);
+    }
+  };
+
+  return [storedValue, setValue] as const;
 }
 
 export function ConsolePage() {
@@ -50,8 +74,8 @@ export function ConsolePage() {
    * - Autoscrolling event logs
    * - Timing delta for event log displays
    */
-  const clientCanvasRef = useRef<HTMLCanvasElement>(null);
-  const serverCanvasRef = useRef<HTMLCanvasElement>(null);
+  // const clientCanvasRef = useRef<HTMLCanvasElement>(null);
+  // const serverCanvasRef = useRef<HTMLCanvasElement>(null);
   const startTimeRef = useRef<string>(new Date().toISOString());
 
   /**
@@ -60,32 +84,9 @@ export function ConsolePage() {
    * - realtimeEvents are event logs, which can be expanded
    * - memoryKv is for set_memory() function
    */
-  // Hook to manage local storage
-  function useLocalStorage<T>(key: string, initialValue: T) {
-    const [storedValue, setStoredValue] = useState<T>(() => {
-      try {
-        const item = window.localStorage.getItem(key);
-        return item ? JSON.parse(item) : initialValue;
-      } catch (error) {
-        console.error('Error reading localStorage key:', key, error);
-        return initialValue;
-      }
-    });
 
-    const setValue = (value: T | ((val: T) => T)) => {
-      try {
-        const valueToStore = value instanceof Function ? value(storedValue) : value;
-        setStoredValue(valueToStore);
-        window.localStorage.setItem(key, JSON.stringify(valueToStore));
-      } catch (error) {
-        console.error('Error setting localStorage key:', key, error);
-      }
-    };
-
-    return [storedValue, setValue] as const;
-  }
-
-  const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
+  // const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
+  const [items, setItems] = useState<ItemType[]>([]);
   const [_, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -113,7 +114,6 @@ export function ConsolePage() {
     // Set state variables
     startTimeRef.current = new Date().toISOString();
     setIsConnected(true);
-    // setItems(client.conversation.getItems());
 
     // Connect to microphone
     await wavRecorder.begin();
@@ -123,12 +123,31 @@ export function ConsolePage() {
 
     // Connect to realtime API
     await client.connect();
-    client.sendUserMessageContent([
-      {
-        type: `input_text`,
-        text: `Hello!`,
-      },
-    ]);
+    if (items.length == 0) {
+      client.sendUserMessageContent([
+        {
+          type: `input_text`,
+          text: `Hey there!`,
+        },
+      ])
+    } else {
+      console.log('Found cached items, sending them to client', { items });
+      const itemsCopy = [...items];
+      setItems([]);
+
+      itemsCopy.forEach((item) => {
+        console.log('Sending item to client', { item });
+        const text = item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '';
+        if (text) {
+          if (item.role == 'user') {
+            addUserMessageContent(text);
+          } else {
+            addAssistantMessageContent(text);
+          }
+        }
+      });
+      // ask it to continue from last conversation
+    }
 
     const recordAudio = async () => {
       await wavRecorder.record(async (data) => {
@@ -144,11 +163,8 @@ export function ConsolePage() {
           await wavStreamPlayer.interrupt();
           console.log('Interrupted wavStreamPlayer');
 
-          // Create a new client
-          clientRef.current = new RealtimeClient({
-            apiKey: apiKey,
-            dangerouslyAllowAPIKeyInBrowser: true,
-          });
+          // 
+          clientRef.current.disconnect();
 
           // Call connectConversation again
           await connectConversation();
@@ -182,6 +198,9 @@ export function ConsolePage() {
     client.deleteItem(id);
   }, []);
 
+  /**
+   * Add an assistant message to the conversation
+   */
   const addAssistantMessageContent = (text: string) => {
     clientRef.current.realtime.send('conversation.item.create', {
       item: {
@@ -192,12 +211,25 @@ export function ConsolePage() {
     });
   }
 
+  /**
+   * Add a user message to the conversation
+   */
   const addUserMessageContent = (text: string) => {
     clientRef.current.realtime.send('conversation.item.create', {
       item: {
         type: 'message',
         role: 'user',
         content: [{ type: 'input_text', text: text }],
+      },
+    });
+  }
+  const addUserMessageAudio = (audio: Int16Array) => {
+    const audioBase64 = RealtimeUtils.arrayBufferToBase64(audio);
+    clientRef.current.realtime.send('conversation.item.create', {
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_audio', audio: audioBase64 }],
       },
     });
   }
@@ -215,14 +247,18 @@ export function ConsolePage() {
     }
   }, [items]);
 
+  /**
+   * Core RealtimeClient and audio capture setup
+   * Set all of our instructions, tools, events and more
+   */
   const setupSession = (client: RealtimeClient, wavStreamPlayer: WavStreamPlayer) => {
 
     // Set instructions
-    client.updateSession({ instructions: instructions });
-    // Set transcription, otherwise we don't get user transcriptions back
-    client.updateSession({ input_audio_transcription: { model: 'whisper-1' } });
-    // Set turn detection to server VAD
-    client.updateSession({ turn_detection: { type: 'server_vad' } })
+    client.updateSession({
+      instructions: instructions,
+      input_audio_transcription: { model: 'whisper-1' },
+      turn_detection: { type: 'server_vad' }
+    });
 
     // handle realtime events from client + server for event logging
     client.on('realtime.event', (realtimeEvent: RealtimeEvent) => {
@@ -250,43 +286,31 @@ export function ConsolePage() {
 
     client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
-      // console.log({ items });
       if (delta?.audio) {
         wavStreamPlayer.add16BitPCM(delta.audio, item.id);
       }
-      if (item.status === 'completed' && item.formatted.audio?.length) {
-        const wavFile = await WavRecorder.decode(
-          item.formatted.audio,
-          24000,
-          24000
-        );
-        item.formatted.file = wavFile;
-      }
-      setItems(items);
+      // if (item.status === 'completed' && item.formatted.audio?.length) {
+      //   const wavFile = await WavRecorder.decode(
+      //     item.formatted.audio,
+      //     24000,
+      //     24000
+      //   );
+      //   item.formatted.file = wavFile;
+      // }
+      const itemsWithoutAudio = items.map(item => {
+        const { formatted, ...rest } = item;
+        return { ...rest, formatted: { ...formatted, audio: undefined } };
+      });
+      setItems(itemsWithoutAudio);
+
+      // You can now use `audioStorage` to manage audio bytes separately
     });
 
-    if (items.length === 0) {
-      setItems(client.conversation.getItems()); // Needed?
-    } else {
-      const itemsCopy = [...items];
-      setItems([]);
-
-      itemsCopy.forEach((item) => {
-        const text = item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '';
-        if (text) {
-          if (item.role == 'user') {
-            addUserMessageContent(text);
-          } else {
-            addAssistantMessageContent(text);
-          }
-        }
-      });
-    }
+    // setItems(client.conversation.getItems()); // Needed?
   }
 
   /**
-   * Core RealtimeClient and audio capture setup
-   * Set all of our instructions, tools, events and more
+   * Setup session on mount
    */
   useEffect(() => {
     const wavStreamPlayer = wavStreamPlayerRef.current;
