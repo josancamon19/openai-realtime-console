@@ -89,7 +89,10 @@ export function ConsolePage() {
    * - memoryKv is for set_memory() function
    */
 
-  const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
+  // const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
+  const [items, setItems] = useState<ItemType[]>([]);
+  // fallback because couldn't get it to work using items history and restoring the session.
+  const [messageList, setMessageList] = useLocalStorage<{ id: string, sender: string, message: string }[]>('messageHistory', []);
   const [audioFiles, setAudioFiles] = useState<{ [id: string]: any }>({});
 
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
@@ -144,7 +147,7 @@ export function ConsolePage() {
       }
     }
   }, [realtimeEvents]);
-  
+
   /**
    * Connect to conversation:
    * WavRecorder taks speech input, WavStreamPlayer output, client is API client
@@ -162,7 +165,8 @@ export function ConsolePage() {
     await wavStreamPlayer.connect();
     await client.connect();
 
-    if (items.length == 0) {
+    // if (items.length == 0) {
+    if (messageList.length == 0) {
       client.sendUserMessageContent([
         {
           type: `input_text`,
@@ -170,30 +174,37 @@ export function ConsolePage() {
         },
       ])
     } else {
-      console.log('Found cached items, sending them to client', { items });
-      const itemsCopy = [...items];
+      client.sendUserMessageContent([
+        {
+          type: `input_text`,
+          text: `Let's continue from the last conversation.`,
+        },
+      ])
+      // console.log('Found cached items, sending them to client', { items });
+      // const itemsCopy = [...items];
 
-      const audioData = await getAllInt16Arrays();
-      let previousItemId: string | undefined;
-      itemsCopy.forEach(async (item) => {
-        console.log('Sending item to client', { id: item.id, role: item.role, prev_id: previousItemId, text: item.formatted.transcript || item.formatted.text });
-        const text = item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '';
-        const audio = audioData[item.id];
-        if (item.role == 'user') {
-          if (audio && text) {
-            addUserMessageAudio(item.id, audio, text, previousItemId);
-          }
-        } else if (text) {
-          addAssistantMessageContent(item.id, text, previousItemId);
-        }
-        previousItemId = item.id;
-      });
-      setTimeout(() => {
-        const updatedItems = client.conversation.getItems();
-        console.log({ updatedItems });
-      }, 3000);
+      // Never receiving audio data why?
 
-      // ask it to continue from last conversation
+      // const audioData = await getAllInt16Arrays();
+      // let previousItemId: string | undefined;
+      // itemsCopy.forEach(async (item) => {
+      //   console.log('Sending item to client', { id: item.id, role: item.role, prev_id: previousItemId, text: item.formatted.transcript || item.formatted.text });
+      //   const text = item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '';
+      //   const audio = audioData[item.id];
+      //   if (item.role == 'user') {
+      //     if (audio && text) {
+      //       addUserMessageAudio(item.id, audio, text, previousItemId);
+      //     }
+      //   } else if (text) {
+      //     addAssistantMessageContent(item.id, text, previousItemId);
+      //   }
+      //   previousItemId = item.id;
+      // });
+      // setTimeout(() => {
+      //   const updatedItems = client.conversation.getItems();
+      //   console.log({ updatedItems });
+      // }, 1000);
+
     }
 
     const recordAudio = async () => {
@@ -266,16 +277,19 @@ export function ConsolePage() {
 
   const addUserMessageAudio = (id: string, audio: Int16Array, text: string, previousItemId: string | undefined) => {
     console.log('~addUserMessageAudio', { id, text, previousItemId, audioLength: audio.length });
-    const audioBase64 = RealtimeUtils.arrayBufferToBase64(audio);
     clientRef.current.realtime.send('conversation.item.create', {
       // event_id: id,
       // previous_item_id: previousItemId,
-      // TODO: user items are not receiving anything when sent after, thus they are empty. Thus they are cleared on 2nd reload.
+      // TODO: user items are not receiving anything when sent after, so they are empty.
+      // Thus they are cleared on 2nd reload.
+
+      // audio not being sent ???
       item: {
         type: 'message',
         role: 'user',
         status: 'completed',
-        content: [{ type: 'input_audio', audio: audioBase64 }], // transcript: text
+        content: [{ type: 'input_audio', audio: RealtimeUtils.arrayBufferToBase64(audio), transcript: text }],
+        // content: [{ type: 'input_text', text: text }], 
       },
     });
   }
@@ -298,10 +312,13 @@ export function ConsolePage() {
    * Set all of our instructions, tools, events and more
    */
   const setupSession = (client: RealtimeClient, wavStreamPlayer: WavStreamPlayer) => {
-
+    let instructionsCopy = instructions;
+    if (messageList.length > 0) {
+      instructionsCopy = instructionsCopy + `\n\nThe following is a history of our previous conversation:\n${messageList.map(message => `${message.sender}: ${message.message}`).join('\n')}`;
+    }
     // Set instructions
     client.updateSession({
-      instructions: instructions,
+      instructions: instructionsCopy,
       input_audio_transcription: { model: 'whisper-1' },
       turn_detection: { type: 'server_vad' }
     });
@@ -332,6 +349,7 @@ export function ConsolePage() {
 
     client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
+      console.log({ items });
       if (delta?.audio) {
         wavStreamPlayer.add16BitPCM(delta.audio, item.id);
       }
@@ -352,16 +370,39 @@ export function ConsolePage() {
         return { ...rest, formatted: { ...formatted, audio: undefined, file: undefined } };
       });
       setItems(itemsWithoutAudio);
-      items.forEach(async (item) => {
-        if (item.formatted.audio && item.formatted.audio.length) {
-          try {
-            await upsertInt16Array(item.id, item.formatted.audio);
-            // console.log(`Audio for item ${item.id} upserted successfully.`);
-          } catch (error) {
-            console.error(`Failed to upsert audio for item ${item.id}:`, error);
+      setMessageList((prevMessageList) => {
+        const updatedMessageList = [...prevMessageList];
+
+        items.forEach((item) => {
+          const existingIndex = updatedMessageList.findIndex(
+            (message) => message.id === item.id
+          );
+
+          const newMessage: { id: string, sender: string, message: string } = {
+            id: item.id,
+            sender: item.role!,
+            message: item.formatted.transcript || item.formatted.text || '',
+          };
+
+          if (existingIndex !== -1) {
+            updatedMessageList[existingIndex] = newMessage;
+          } else {
+            updatedMessageList.push(newMessage);
           }
-        }
+        });
+
+        return updatedMessageList;
       });
+      // items.forEach(async (item) => {
+      //   if (item.formatted.audio && item.formatted.audio.length) {
+      //     try {
+      //       await upsertInt16Array(item.id, item.formatted.audio);
+      //       // console.log(`Audio for item ${item.id} upserted successfully.`);
+      //     } catch (error) {
+      //       console.error(`Failed to upsert audio for item ${item.id}:`, error);
+      //     }
+      //   }
+      // });
 
     });
 
