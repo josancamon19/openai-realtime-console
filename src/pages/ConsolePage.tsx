@@ -85,13 +85,7 @@ export function ConsolePage() {
     return [storedValue, setValue] as const;
   }
 
-  const [items, setItems] = useLocalStorage<ItemType[]>('items',[]);
-  // Cached items with "role" and "text" value
-  const [cachedItems, setCachedItems] = useLocalStorage<{ id: string; role: string; text: string }[]>(
-    'cachedItems',
-    []
-  );
-
+  const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
   const [_, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -119,7 +113,7 @@ export function ConsolePage() {
     // Set state variables
     startTimeRef.current = new Date().toISOString();
     setIsConnected(true);
-    setItems(client.conversation.getItems());
+    // setItems(client.conversation.getItems());
 
     // Connect to microphone
     await wavRecorder.begin();
@@ -171,7 +165,7 @@ export function ConsolePage() {
    */
   const disconnectConversation = useCallback(async () => {
     setIsConnected(false);
-    setItems([]);
+    // setItems([]);
 
     const client = clientRef.current;
     client.disconnect();
@@ -245,6 +239,7 @@ export function ConsolePage() {
     });
 
     client.on('error', (event: any) => console.error(event));
+
     client.on('conversation.interrupted', async () => {
       const trackSampleOffset = await wavStreamPlayer.interrupt();
       if (trackSampleOffset?.trackId) {
@@ -268,29 +263,25 @@ export function ConsolePage() {
         item.formatted.file = wavFile;
       }
       setItems(items);
-      setCachedItems((prevItems: { id: string; role: string; text: string }[]) => {
-        const updatedItems = items.reduce((acc, currentItem) => {
-          const index = acc.findIndex(item => item.id === currentItem.id);
-          if (index !== -1) {
-            acc[index] = {
-              id: currentItem.id,
-              role: currentItem.role!,
-              text: currentItem.formatted.transcript ? currentItem.formatted.transcript : currentItem.formatted.text || ''
-            }; // Replace existing item with the same id
-          } else {
-            acc.push({
-              id: currentItem.id,
-              role: currentItem.role!,
-              text: currentItem.formatted.transcript ? currentItem.formatted.transcript : currentItem.formatted.text || ''
-            }); // Add new item
-          }
-          return acc;
-        }, [...prevItems]); // Start with previous items
-        return updatedItems;
-      });
     });
 
-    setItems(client.conversation.getItems());
+    if (items.length === 0) {
+      setItems(client.conversation.getItems()); // Needed?
+    } else {
+      const itemsCopy = [...items];
+      setItems([]);
+
+      itemsCopy.forEach((item) => {
+        const text = item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '';
+        if (text) {
+          if (item.role == 'user') {
+            addUserMessageContent(text);
+          } else {
+            addAssistantMessageContent(text);
+          }
+        }
+      });
+    }
   }
 
   /**
