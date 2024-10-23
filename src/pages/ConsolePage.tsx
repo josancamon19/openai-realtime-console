@@ -11,6 +11,8 @@ import { X, Edit, Zap } from 'react-feather';
 import { Button } from '../components/button/Button';
 
 import './ConsolePage.scss';
+import { clearInt16Arrays, getAllInt16Arrays, getInt16Array, upsertInt16Array } from '../utils/db.js';
+import { disconnect } from 'process';
 
 /**
  * Type for all event logs
@@ -85,8 +87,9 @@ export function ConsolePage() {
    * - memoryKv is for set_memory() function
    */
 
-  // const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
-  const [items, setItems] = useState<ItemType[]>([]);
+  const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
+  const [audioFiles, setAudioFiles] = useState<{ [id: string]: any }>({});
+
   const [_, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -115,14 +118,10 @@ export function ConsolePage() {
     startTimeRef.current = new Date().toISOString();
     setIsConnected(true);
 
-    // Connect to microphone
     await wavRecorder.begin();
-
-    // Connect to audio output
     await wavStreamPlayer.connect();
-
-    // Connect to realtime API
     await client.connect();
+
     if (items.length == 0) {
       client.sendUserMessageContent([
         {
@@ -133,19 +132,27 @@ export function ConsolePage() {
     } else {
       console.log('Found cached items, sending them to client', { items });
       const itemsCopy = [...items];
-      setItems([]);
 
-      itemsCopy.forEach((item) => {
-        console.log('Sending item to client', { item });
+      const audioData = await getAllInt16Arrays();
+      let previousItemId: string | undefined;
+      itemsCopy.forEach(async (item) => {
+        console.log('Sending item to client', { id: item.id, role: item.role, prev_id: previousItemId, text: item.formatted.transcript || item.formatted.text });
         const text = item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '';
-        if (text) {
-          if (item.role == 'user') {
-            addUserMessageContent(text);
-          } else {
-            addAssistantMessageContent(text);
+        const audio = audioData[item.id];
+        if (item.role == 'user') {
+          if (audio && text) {
+            addUserMessageAudio(item.id, audio, text, previousItemId);
           }
+        } else if (text) {
+          addAssistantMessageContent(item.id, text, previousItemId);
         }
+        previousItemId = item.id;
       });
+      setTimeout(() => {
+        const updatedItems = client.conversation.getItems();
+        console.log({ updatedItems });
+      }, 3000);
+
       // ask it to continue from last conversation
     }
 
@@ -181,7 +188,6 @@ export function ConsolePage() {
    */
   const disconnectConversation = useCallback(async () => {
     setIsConnected(false);
-    // setItems([]);
 
     const client = clientRef.current;
     client.disconnect();
@@ -201,11 +207,14 @@ export function ConsolePage() {
   /**
    * Add an assistant message to the conversation
    */
-  const addAssistantMessageContent = (text: string) => {
+  const addAssistantMessageContent = (id: string, text: string, previousItemId: string | undefined) => {
     clientRef.current.realtime.send('conversation.item.create', {
+      // event_id: id,
+      // previous_item_id: previousItemId,
       item: {
         type: 'message',
         role: 'assistant',
+        status: 'completed',
         content: [{ type: 'text', text: text }],
       },
     });
@@ -214,22 +223,19 @@ export function ConsolePage() {
   /**
    * Add a user message to the conversation
    */
-  const addUserMessageContent = (text: string) => {
-    clientRef.current.realtime.send('conversation.item.create', {
-      item: {
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_text', text: text }],
-      },
-    });
-  }
-  const addUserMessageAudio = (audio: Int16Array) => {
+
+  const addUserMessageAudio = (id: string, audio: Int16Array, text: string, previousItemId: string | undefined) => {
+    console.log('addUserMessageAudio', { id, text, previousItemId, audioLength: audio.length });
     const audioBase64 = RealtimeUtils.arrayBufferToBase64(audio);
     clientRef.current.realtime.send('conversation.item.create', {
+      // event_id: id,
+      // previous_item_id: previousItemId,
+      // TODO: user items are not receiving anything when sent after, thus they are empty. Thus they are cleared on 2nd reload.
       item: {
         type: 'message',
         role: 'user',
-        content: [{ type: 'input_audio', audio: audioBase64 }],
+        status: 'completed',
+        content: [{ type: 'input_audio', audio: audioBase64 }], // transcript: text
       },
     });
   }
@@ -289,24 +295,36 @@ export function ConsolePage() {
       if (delta?.audio) {
         wavStreamPlayer.add16BitPCM(delta.audio, item.id);
       }
-      // if (item.status === 'completed' && item.formatted.audio?.length) {
-      //   const wavFile = await WavRecorder.decode(
-      //     item.formatted.audio,
-      //     24000,
-      //     24000
-      //   );
-      //   item.formatted.file = wavFile;
-      // }
+      if (item.status === 'completed' && item.formatted.audio?.length) {
+        const wavFile = await WavRecorder.decode(
+          item.formatted.audio,
+          24000,
+          24000
+        );
+        // item.formatted.file = wavFile;
+        setAudioFiles((prevAudioFiles) => ({
+          ...prevAudioFiles,
+          [item.id]: wavFile,
+        }));
+      }
       const itemsWithoutAudio = items.map(item => {
         const { formatted, ...rest } = item;
-        return { ...rest, formatted: { ...formatted, audio: undefined } };
+        return { ...rest, formatted: { ...formatted, audio: undefined, file: undefined } };
       });
       setItems(itemsWithoutAudio);
+      items.forEach(async (item) => {
+        if (item.formatted.audio && item.formatted.audio.length) {
+          try {
+            await upsertInt16Array(item.id, item.formatted.audio);
+            // console.log(`Audio for item ${item.id} upserted successfully.`);
+          } catch (error) {
+            console.error(`Failed to upsert audio for item ${item.id}:`, error);
+          }
+        }
+      });
 
-      // You can now use `audioStorage` to manage audio bytes separately
     });
 
-    // setItems(client.conversation.getItems()); // Needed?
   }
 
   /**
@@ -322,6 +340,17 @@ export function ConsolePage() {
       client.reset();
     };
   }, []);
+
+  const clearData = async () => {
+    setItems([]);
+    try {
+      await clearInt16Arrays();
+      console.log('IndexedDB data cleared successfully.');
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to clear IndexedDB data:', error);
+    }
+  };
 
   /**
    * Render the application
@@ -398,9 +427,9 @@ export function ConsolePage() {
                           </div>
                         )}
 
-                      {conversationItem.formatted.file && conversationItem.role === 'assistant' && (
+                      {audioFiles[conversationItem.id] && conversationItem.role === 'assistant' && (
                         <audio
-                          src={conversationItem.formatted.file.url}
+                          src={audioFiles[conversationItem.id].url}
                           controls
                           style={{ paddingTop: '12px' }}
                         />
@@ -412,23 +441,6 @@ export function ConsolePage() {
             </div>
           </div>
           <div className="content-actions">
-            {/*<Toggle*/}
-            {/*  defaultValue={false}*/}
-            {/*  labels={['manual', 'vad']}*/}
-            {/*  values={['none', 'server_vad']}*/}
-            {/*  onChange={(_, value) => changeTurnEndType(value)}*/}
-            {/*/>*/}
-            {/*<div className="spacer" />*/}
-            {/*{isConnected && canPushToTalk && (*/}
-            {/*  <Button*/}
-            {/*    label={isRecording ? 'release to send' : 'push to talk'}*/}
-            {/*    buttonStyle={isRecording ? 'alert' : 'regular'}*/}
-            {/*    disabled={!isConnected || !canPushToTalk}*/}
-            {/*    onMouseDown={startRecording}*/}
-            {/*    onMouseUp={stopRecording}*/}
-            {/*  />*/}
-            {/*)}*/}
-            <div className="spacer" />
             <Button
               label={isConnected ? 'disconnect' : 'connect'}
               iconPosition={isConnected ? 'end' : 'start'}
@@ -439,6 +451,14 @@ export function ConsolePage() {
               }
             />
             <div className="spacer" />
+            <Button
+              label="clear"
+              iconPosition="start"
+              icon={X}
+              buttonStyle="alert"
+              onClick={clearData}
+            />
+            <div />
           </div>
         </div>
       </div>
