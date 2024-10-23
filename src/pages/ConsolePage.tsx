@@ -22,7 +22,6 @@ import { WavRenderer } from '../utils/wav_renderer';
 
 import { X, Edit, Zap } from 'react-feather';
 import { Button } from '../components/button/Button';
-import { Toggle } from '../components/toggle/Toggle';
 
 import './ConsolePage.scss';
 
@@ -92,8 +91,6 @@ export function ConsolePage() {
   const [items, setItems] = useState<ItemType[]>([]);
   const [_, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [canPushToTalk, setCanPushToTalk] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
 
   /**
    * When you click the API key
@@ -119,7 +116,6 @@ export function ConsolePage() {
     // Set state variables
     startTimeRef.current = new Date().toISOString();
     setIsConnected(true);
-    // setRealtimeEvents([]);
     setItems(client.conversation.getItems());
 
     // Connect to microphone
@@ -134,7 +130,6 @@ export function ConsolePage() {
       {
         type: `input_text`,
         text: `Hello!`,
-        // text: `For testing purposes, I want you to list ten car brands. Number each item, e.g. "one (or whatever number you are one): the item name".`
       },
     ]);
 
@@ -386,10 +381,12 @@ export function ConsolePage() {
                               '(truncated)'}
                           </div>
                         )}
-                      {conversationItem.formatted.file && (
+                        
+                      {conversationItem.formatted.file && conversationItem.role === 'assistant' && (
                         <audio
                           src={conversationItem.formatted.file.url}
                           controls
+                          style={{ paddingTop: '12px' }}
                         />
                       )}
                     </div>
