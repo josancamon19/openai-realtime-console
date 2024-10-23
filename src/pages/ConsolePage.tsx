@@ -349,7 +349,6 @@ export function ConsolePage() {
 
     client.on('conversation.updated', async ({ item, delta }: any) => {
       const items = client.conversation.getItems();
-      console.log({ items });
       if (delta?.audio) {
         wavStreamPlayer.add16BitPCM(delta.audio, item.id);
       }
@@ -455,7 +454,7 @@ export function ConsolePage() {
       </div>
       <div className="content-main">
         <div className="content-logs">
-          <div className="content-block events">
+          {/* <div className="content-block events">
             <div className="visualization">
               <div className="visualization-entry client">
                 <canvas ref={clientCanvasRef} />
@@ -527,7 +526,7 @@ export function ConsolePage() {
                 );
               })}
             </div>
-          </div>
+          </div> */}
           <div className="content-block events">
             <div className="content-block-title">conversation</div>
             <div className="content-block-body" data-conversation-content>
