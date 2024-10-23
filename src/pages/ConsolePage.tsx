@@ -7,7 +7,7 @@ import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
-import { X, Edit, Zap } from 'react-feather';
+import { X, Edit, Zap, ArrowUp, ArrowDown } from 'react-feather';
 import { Button } from '../components/button/Button';
 
 import './ConsolePage.scss';
@@ -76,8 +76,10 @@ export function ConsolePage() {
    * - Autoscrolling event logs
    * - Timing delta for event log displays
    */
-  // const clientCanvasRef = useRef<HTMLCanvasElement>(null);
-  // const serverCanvasRef = useRef<HTMLCanvasElement>(null);
+  const clientCanvasRef = useRef<HTMLCanvasElement>(null);
+  const serverCanvasRef = useRef<HTMLCanvasElement>(null);
+  const eventsScrollHeightRef = useRef(0);
+  const eventsScrollRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<string>(new Date().toISOString());
 
   /**
@@ -90,7 +92,10 @@ export function ConsolePage() {
   const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
   const [audioFiles, setAudioFiles] = useState<{ [id: string]: any }>({});
 
-  const [_, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
+  const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
+  const [expandedEvents, setExpandedEvents] = useState<{
+    [key: string]: boolean;
+  }>({});
   const [isConnected, setIsConnected] = useState(false);
 
   /**
@@ -105,6 +110,41 @@ export function ConsolePage() {
     }
   }, []);
 
+  /**
+ * Utility for formatting the timing of logs
+ */
+  const formatTime = useCallback((timestamp: string) => {
+    const startTime = startTimeRef.current;
+    const t0 = new Date(startTime).valueOf();
+    const t1 = new Date(timestamp).valueOf();
+    const delta = t1 - t0;
+    const hs = Math.floor(delta / 10) % 100;
+    const s = Math.floor(delta / 1000) % 60;
+    const m = Math.floor(delta / 60_000) % 60;
+    const pad = (n: number) => {
+      let s = n + '';
+      while (s.length < 2) {
+        s = '0' + s;
+      }
+      return s;
+    };
+    return `${pad(m)}:${pad(s)}.${pad(hs)}`;
+  }, []);
+  /**
+   * Auto-scroll the event logs
+   */
+  useEffect(() => {
+    if (eventsScrollRef.current) {
+      const eventsEl = eventsScrollRef.current;
+      const scrollHeight = eventsEl.scrollHeight;
+      // Only scroll if height has just changed
+      if (scrollHeight !== eventsScrollHeightRef.current) {
+        eventsEl.scrollTop = scrollHeight;
+        eventsScrollHeightRef.current = scrollHeight;
+      }
+    }
+  }, [realtimeEvents]);
+  
   /**
    * Connect to conversation:
    * WavRecorder taks speech input, WavStreamPlayer output, client is API client
@@ -225,7 +265,7 @@ export function ConsolePage() {
    */
 
   const addUserMessageAudio = (id: string, audio: Int16Array, text: string, previousItemId: string | undefined) => {
-    console.log('addUserMessageAudio', { id, text, previousItemId, audioLength: audio.length });
+    console.log('~addUserMessageAudio', { id, text, previousItemId, audioLength: audio.length });
     const audioBase64 = RealtimeUtils.arrayBufferToBase64(audio);
     clientRef.current.realtime.send('conversation.item.create', {
       // event_id: id,
@@ -374,6 +414,79 @@ export function ConsolePage() {
       </div>
       <div className="content-main">
         <div className="content-logs">
+          <div className="content-block events">
+            <div className="visualization">
+              <div className="visualization-entry client">
+                <canvas ref={clientCanvasRef} />
+              </div>
+              <div className="visualization-entry server">
+                <canvas ref={serverCanvasRef} />
+              </div>
+            </div>
+            <div className="content-block-title">events</div>
+            <div className="content-block-body" ref={eventsScrollRef}>
+              {!realtimeEvents.length && `awaiting connection...`}
+              {realtimeEvents.map((realtimeEvent, i) => {
+                const count = realtimeEvent.count;
+                const event = { ...realtimeEvent.event };
+                if (event.type === 'input_audio_buffer.append') {
+                  event.audio = `[trimmed: ${event.audio.length} bytes]`;
+                } else if (event.type === 'response.audio.delta') {
+                  event.delta = `[trimmed: ${event.delta.length} bytes]`;
+                }
+                return (
+                  <div className="event" key={event.event_id}>
+                    <div className="event-timestamp">
+                      {formatTime(realtimeEvent.time)}
+                    </div>
+                    <div className="event-details">
+                      <div
+                        className="event-summary"
+                        onClick={() => {
+                          // toggle event details
+                          const id = event.event_id;
+                          const expanded = { ...expandedEvents };
+                          if (expanded[id]) {
+                            delete expanded[id];
+                          } else {
+                            expanded[id] = true;
+                          }
+                          setExpandedEvents(expanded);
+                        }}
+                      >
+                        <div
+                          className={`event-source ${event.type === 'error'
+                            ? 'error'
+                            : realtimeEvent.source
+                            }`}
+                        >
+                          {realtimeEvent.source === 'client' ? (
+                            <ArrowUp />
+                          ) : (
+                            <ArrowDown />
+                          )}
+                          <span>
+                            {event.type === 'error'
+                              ? 'error!'
+                              : realtimeEvent.source}
+                          </span>
+                        </div>
+                        <div className="event-type">
+                          {event.type}
+                          {count && ` (${count})`}
+                        </div>
+                      </div>
+                      {!!expandedEvents[event.event_id] && (
+                        <div className="event-payload">
+                          {JSON.stringify(event, null, 2)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           <div className="content-block events">
             <div className="content-block-title">conversation</div>
             <div className="content-block-body" data-conversation-content>
