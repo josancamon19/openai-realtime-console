@@ -93,6 +93,11 @@ export function ConsolePage() {
   const [items, setItems] = useState<ItemType[]>([]);
   // fallback because couldn't get it to work using items history and restoring the session.
   const [messageList, setMessageList] = useLocalStorage<{ id: string, sender: string, message: string }[]>('messageHistory', []);
+  const [messageListCopy, setMessageListCopy] = useState<{ id: string, sender: string, message: string }[]>([]);
+  useEffect(() => {
+    setMessageListCopy(messageList);
+  }, []);
+
   const [audioFiles, setAudioFiles] = useState<{ [id: string]: any }>({});
 
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
@@ -152,7 +157,30 @@ export function ConsolePage() {
    * Connect to conversation:
    * WavRecorder taks speech input, WavStreamPlayer output, client is API client
    */
-  const connectConversation = useCallback(async () => {
+  const recordAudio = async (client: RealtimeClient, wavRecorder: WavRecorder, wavStreamPlayer: WavStreamPlayer) => {
+    await wavRecorder.record(async (data) => {
+      try {
+        client.appendInputAudio(data.mono);
+      } catch (error) {
+        console.error('Error appending input audio:', error);
+        console.log('Client state:', { isConnected: client.isConnected() });
+        console.log('Reinitializing client and reconnecting...');
+
+        // Finish current wav recorder
+        await wavRecorder.end();
+        await wavStreamPlayer.interrupt();
+        console.log('Interrupted wavStreamPlayer');
+
+        // 
+        clientRef.current.disconnect();
+
+        // Call connectConversation again
+        await connectConversation(true);
+        console.log('Reconnected client');
+      }
+    });
+  };
+  const connectConversation = useCallback(async (isReconnecting: boolean = false) => {
     const client = clientRef.current;
     const wavRecorder = wavRecorderRef.current;
     const wavStreamPlayer = wavStreamPlayerRef.current;
@@ -163,9 +191,23 @@ export function ConsolePage() {
 
     await wavRecorder.begin();
     await wavStreamPlayer.connect();
-    await client.connect();
+    const connected = await client.connect();
+    console.log('Connected to client', { connected });
 
-    // if (items.length == 0) {
+    if (isReconnecting) {
+      await recordAudio(client, wavRecorder, wavStreamPlayer);
+      return;
+    };
+    const refreshStr = `Let's continue from the last conversation.`;
+    if (messageList.length > 0) {
+      const lastMessage = messageList[messageList.length - 1].message;
+      const secondLastMessage = messageList.length > 1 ? messageList[messageList.length - 2].message : '';
+      if (lastMessage.includes(refreshStr) || secondLastMessage.includes(refreshStr)) {
+        await recordAudio(client, wavRecorder, wavStreamPlayer);
+        return;
+      }
+    }
+
     if (messageList.length == 0) {
       client.sendUserMessageContent([
         {
@@ -207,31 +249,7 @@ export function ConsolePage() {
 
     }
 
-    const recordAudio = async () => {
-      await wavRecorder.record(async (data) => {
-        try {
-          client.appendInputAudio(data.mono);
-        } catch (error) {
-          console.error('Error appending input audio:', error);
-          console.log('Client state:', { isConnected: client.isConnected() });
-          console.log('Reinitializing client and reconnecting...');
-
-          // Finish current wav recorder
-          await wavRecorder.end();
-          await wavStreamPlayer.interrupt();
-          console.log('Interrupted wavStreamPlayer');
-
-          // 
-          clientRef.current.disconnect();
-
-          // Call connectConversation again
-          await connectConversation();
-          console.log('Reconnected client');
-        }
-      });
-    };
-
-    await recordAudio();
+    await recordAudio(client, wavRecorder, wavStreamPlayer);
   }, []);
 
   /**
@@ -306,6 +324,75 @@ export function ConsolePage() {
       conversationEl.scrollTop = conversationEl.scrollHeight;
     }
   }, [items]);
+  /**
+    * Set up render loops for the visualization canvas
+    */
+  useEffect(() => {
+    let isLoaded = true;
+
+    const wavRecorder = wavRecorderRef.current;
+    const clientCanvas = clientCanvasRef.current;
+    let clientCtx: CanvasRenderingContext2D | null = null;
+
+    const wavStreamPlayer = wavStreamPlayerRef.current;
+    const serverCanvas = serverCanvasRef.current;
+    let serverCtx: CanvasRenderingContext2D | null = null;
+
+    const render = () => {
+      if (isLoaded) {
+        if (clientCanvas) {
+          if (!clientCanvas.width || !clientCanvas.height) {
+            clientCanvas.width = clientCanvas.offsetWidth;
+            clientCanvas.height = clientCanvas.offsetHeight;
+          }
+          clientCtx = clientCtx || clientCanvas.getContext('2d');
+          if (clientCtx) {
+            clientCtx.clearRect(0, 0, clientCanvas.width, clientCanvas.height);
+            const result = wavRecorder.recording
+              ? wavRecorder.getFrequencies('voice')
+              : { values: new Float32Array([0]) };
+            WavRenderer.drawBars(
+              clientCanvas,
+              clientCtx,
+              result.values,
+              '#0099ff',
+              10,
+              0,
+              8
+            );
+          }
+        }
+        if (serverCanvas) {
+          if (!serverCanvas.width || !serverCanvas.height) {
+            serverCanvas.width = serverCanvas.offsetWidth;
+            serverCanvas.height = serverCanvas.offsetHeight;
+          }
+          serverCtx = serverCtx || serverCanvas.getContext('2d');
+          if (serverCtx) {
+            serverCtx.clearRect(0, 0, serverCanvas.width, serverCanvas.height);
+            const result = wavStreamPlayer.analyser
+              ? wavStreamPlayer.getFrequencies('voice')
+              : { values: new Float32Array([0]) };
+            WavRenderer.drawBars(
+              serverCanvas,
+              serverCtx,
+              result.values,
+              '#009900',
+              10,
+              0,
+              8
+            );
+          }
+        }
+        window.requestAnimationFrame(render);
+      }
+    };
+    render();
+
+    return () => {
+      isLoaded = false;
+    };
+  }, []);
 
   /**
    * Core RealtimeClient and audio capture setup
@@ -380,13 +467,15 @@ export function ConsolePage() {
           const newMessage: { id: string, sender: string, message: string } = {
             id: item.id,
             sender: item.role!,
-            message: item.formatted.transcript || item.formatted.text || '',
+            message: item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '',
           };
 
-          if (existingIndex !== -1) {
-            updatedMessageList[existingIndex] = newMessage;
-          } else {
-            updatedMessageList.push(newMessage);
+          if (newMessage.message.length > 0) {
+            if (existingIndex !== -1) {
+              updatedMessageList[existingIndex] = newMessage;
+            } else {
+              updatedMessageList.push(newMessage);
+            }
           }
         });
 
@@ -422,7 +511,9 @@ export function ConsolePage() {
   }, []);
 
   const clearData = async () => {
+    copyConversation();
     setItems([]);
+    setMessageList([]);
     try {
       await clearInt16Arrays();
       console.log('IndexedDB data cleared successfully.');
@@ -431,6 +522,11 @@ export function ConsolePage() {
       console.error('Failed to clear IndexedDB data:', error);
     }
   };
+
+  const copyConversation = () => {
+    const messages = messageList.map(message => `${message.sender}: ${message.message}`);
+    navigator.clipboard.writeText(messages.join('\n'));
+  }
 
   /**
    * Render the application
@@ -530,6 +626,21 @@ export function ConsolePage() {
           <div className="content-block events">
             <div className="content-block-title">conversation</div>
             <div className="content-block-body" data-conversation-content>
+              {messageListCopy.length && <div style={{ marginBottom: '8px', marginTop: '8px' }}>Previous conversation:</div>}
+              {messageListCopy.length && <div style={{ marginBottom: '32px' }}>
+                {messageListCopy.map((message: { id: string, sender: string, message: string }) => (
+                  <div className="conversation-item" key={message.id}>
+                    <div className={`speaker ${message.sender || ''}`}>
+                      <div>
+                        {message.sender}
+                      </div>
+                    </div>
+                    <div className={`speaker-content`}>
+                      {message.message}
+                    </div>
+                  </div>
+                ))}
+              </div>}
               {!items.length && `awaiting connection...`}
               {items.map((conversationItem, i) => {
                 return (
@@ -600,17 +711,38 @@ export function ConsolePage() {
               icon={isConnected ? X : Zap}
               buttonStyle={isConnected ? 'regular' : 'action'}
               onClick={
-                isConnected ? disconnectConversation : connectConversation
+                isConnected ? disconnectConversation : ()=> connectConversation(false)
               }
             />
             <div className="spacer" />
-            <Button
-              label="clear"
-              iconPosition="start"
-              icon={X}
-              buttonStyle="alert"
-              onClick={clearData}
-            />
+            <div>
+              <div className="visualization">
+                <div className="visualization-entry client">
+                  <canvas ref={clientCanvasRef} />
+                </div>
+                <div className="visualization-entry server">
+                  <canvas ref={serverCanvasRef} />
+                </div>
+              </div>
+            </div>
+            <div className="spacer" />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <Button
+                label="Clear and start new"
+                iconPosition="start"
+                icon={X}
+                buttonStyle="alert"
+                onClick={clearData}
+              />
+              <Button
+                label="Copy conversation"
+                iconPosition="start"
+                icon={Zap}
+                buttonStyle="action"
+                style={{ marginTop: '8px' }}
+                onClick={copyConversation}
+              />
+            </div>
             <div />
           </div>
         </div>
