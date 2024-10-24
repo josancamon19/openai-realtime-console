@@ -126,7 +126,6 @@ export function ConsolePage() {
   const resetAPIKey = useCallback(() => {
     const apiKey = prompt('OpenAI API Key');
     if (apiKey !== null) {
-      localStorage.clear();
       localStorage.setItem('tmp::voice_api_key', apiKey);
       window.location.reload();
     }
@@ -135,7 +134,6 @@ export function ConsolePage() {
   const resetTavilyApiKey = useCallback(() => {
     const apiKey = prompt('Tavily API Key');
     if (apiKey !== null) {
-      localStorage.clear();
       localStorage.setItem('tmp::tvly_api_key', apiKey);
       window.location.reload();
     }
