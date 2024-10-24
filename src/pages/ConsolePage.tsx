@@ -575,6 +575,7 @@ export function ConsolePage() {
     copyConversation();
     setItems([]);
     setMessageList([]);
+    setMessageListCopy([]);
     try {
       await clearInt16Arrays();
       console.log('IndexedDB data cleared successfully.');
