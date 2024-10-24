@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 import { RealtimeClient, RealtimeUtils } from '@openai/realtime-api-beta';
-import { ItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
+import { ItemType, SystemItemType, UserItemType, AssistantItemType } from '@openai/realtime-api-beta/dist/lib/client.js';
 // noinspection ES6PreferShortImport
 import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
@@ -13,6 +13,7 @@ import { Button } from '../components/button/Button';
 import './ConsolePage.scss';
 import { clearInt16Arrays, getAllInt16Arrays, getInt16Array, upsertInt16Array } from '../utils/db.js';
 import { disconnect } from 'process';
+import { tavily } from '@tavily/core';
 
 /**
  * Type for all event logs
@@ -50,6 +51,7 @@ function useLocalStorage<T>(key: string, initialValue: T) {
 
 export function ConsolePage() {
   const apiKey = localStorage.getItem('tmp::voice_api_key') || '';
+  const tvly = tavily({ apiKey: "tvly-YOUR_API_KEY" });
 
   /**
    * Instantiate:
@@ -105,6 +107,18 @@ export function ConsolePage() {
     [key: string]: boolean;
   }>({});
   const [isConnected, setIsConnected] = useState(false);
+
+
+  const getItemText = (item: ItemType) => {
+    const text = (item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '').trim();
+    if (text.length == 0) {
+      console.log('getItemText', { item });
+      if ((item as any).content) { // SystemItemType|UserItemType|AssistantItemType
+        return (item as any).content.map((c: any) => c.transcript).join('');
+      }
+    }
+    return text;
+  }
 
   /**
    * When you click the API key
@@ -409,6 +423,35 @@ export function ConsolePage() {
       input_audio_transcription: { model: 'whisper-1' },
       turn_detection: { type: 'server_vad' }
     });
+    client.addTool(
+      {
+        name: 'search_web',
+        description: 'Searches the web for up to date information, beyond your training data available.',
+        parameters: {
+          type: 'object',
+          properties: {
+            key: {
+              type: 'string',
+              description:
+                'The key of the memory value. Always use lowercase and underscores, no other characters.',
+            },
+            value: {
+              type: 'string',
+              description: 'Value can be anything represented as a string',
+            },
+          },
+          required: ['key', 'value'],
+        },
+      },
+      async ({ key, value }: { [key: string]: any }) => {
+        // Step 1. Instantiating your Tavily client
+        const tvly = tavily({ apiKey: "tvly-YOUR_API_KEY" });
+
+        // Step 2. Executing a Q&A search query
+        // const answer = tvly.searchQNA("Who is Leo Messi?");
+        return { ok: true };
+      }
+    );
 
     // handle realtime events from client + server for event logging
     client.on('realtime.event', (realtimeEvent: RealtimeEvent) => {
@@ -435,7 +478,13 @@ export function ConsolePage() {
     });
 
     client.on('conversation.updated', async ({ item, delta }: any) => {
-      const items = client.conversation.getItems();
+      const latestItems = client.conversation.getItems();
+      const lastIsIncomplete = (latestItems[latestItems.length - 1] as any).status === 'incomplete';
+      if (lastIsIncomplete) {
+        console.log('items', { items });
+        console.log('latestItem', { item: latestItems[latestItems.length - 1] });
+      }
+
       if (delta?.audio) {
         wavStreamPlayer.add16BitPCM(delta.audio, item.id);
       }
@@ -451,15 +500,17 @@ export function ConsolePage() {
           [item.id]: wavFile,
         }));
       }
-      const itemsWithoutAudio = items.map(item => {
+      const itemsWithoutAudio = latestItems.map(item => {
         const { formatted, ...rest } = item;
         return { ...rest, formatted: { ...formatted, audio: undefined, file: undefined } };
       });
       setItems(itemsWithoutAudio);
+
+
       setMessageList((prevMessageList) => {
         const updatedMessageList = [...prevMessageList];
 
-        items.forEach((item) => {
+        latestItems.forEach((item) => {
           const existingIndex = updatedMessageList.findIndex(
             (message) => message.id === item.id
           );
@@ -467,7 +518,7 @@ export function ConsolePage() {
           const newMessage: { id: string, sender: string, message: string } = {
             id: item.id,
             sender: item.role!,
-            message: item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '',
+            message: getItemText(item),
           };
 
           if (newMessage.message.length > 0) {
@@ -685,9 +736,7 @@ export function ConsolePage() {
                       {!conversationItem.formatted.tool &&
                         conversationItem.role === 'assistant' && (
                           <div>
-                            {conversationItem.formatted.transcript ||
-                              conversationItem.formatted.text ||
-                              '(tru ncated)'}
+                            {getItemText(conversationItem) || '(truncated)'}
                           </div>
                         )}
 
@@ -711,7 +760,7 @@ export function ConsolePage() {
               icon={isConnected ? X : Zap}
               buttonStyle={isConnected ? 'regular' : 'action'}
               onClick={
-                isConnected ? disconnectConversation : ()=> connectConversation(false)
+                isConnected ? disconnectConversation : () => connectConversation(false)
               }
             />
             <div className="spacer" />
