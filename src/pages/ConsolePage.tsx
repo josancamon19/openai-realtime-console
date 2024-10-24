@@ -715,7 +715,7 @@ export function ConsolePage() {
                   </div>
                 ))}
               </div>}
-              {!items.length && `awaiting connection...`}
+              {!items.length && <div style={{ marginBottom: '16px' }}>awaiting connection...</div>}
               {items.map((conversationItem, i) => {
                 return (
                   <div className="conversation-item" key={conversationItem.id}>
@@ -800,54 +800,34 @@ export function ConsolePage() {
               </div>
             )}
             <div className="spacer" />
-            {window.innerWidth > 768 ? (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <Button
-                  label="Clear and start new"
-                  iconPosition="start"
-                  icon={X}
-                  buttonStyle="alert"
-                  onClick={clearData}
-                />
-                <Button
-                  label="Copy conversation"
-                  iconPosition="start"
-                  icon={Zap}
-                  buttonStyle="action"
-                  style={{ marginTop: '8px' }}
-                  onClick={copyConversation}
-                />
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <Button
-                  label="Settings"
-                  iconPosition="start"
-                  icon={Edit}
-                  buttonStyle="action"
-                  onClick={() => setShowSettings(!showSettings)}
-                />
-                {showSettings && (
-                  <div style={{ display: 'flex', flexDirection: 'column', marginTop: '8px' }}>
-                    <Button
-                      label="Clear and start new"
-                      iconPosition="start"
-                      icon={X}
-                      buttonStyle="alert"
-                      onClick={clearData}
-                    />
-                    <Button
-                      label="Copy conversation"
-                      iconPosition="start"
-                      icon={Zap}
-                      buttonStyle="action"
-                      style={{ marginTop: '8px' }}
-                      onClick={copyConversation}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <Button
+                label="Settings"
+                iconPosition="start"
+                icon={Edit}
+                buttonStyle="action"
+                onClick={() => setShowSettings(!showSettings)}
+              />
+              {showSettings && (
+                <div style={{ display: 'flex', flexDirection: 'column', marginTop: '8px' }}>
+                  <Button
+                    label="Clear and start new"
+                    iconPosition="start"
+                    icon={X}
+                    buttonStyle="alert"
+                    onClick={clearData}
+                  />
+                  <Button
+                    label="Copy conversation"
+                    iconPosition="start"
+                    icon={Zap}
+                    buttonStyle="action"
+                    style={{ marginTop: '8px' }}
+                    onClick={copyConversation}
+                  />
+                </div>
+              )}
+            </div>
             <div />
           </div>
         </div>
