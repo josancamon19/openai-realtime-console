@@ -51,7 +51,7 @@ function useLocalStorage<T>(key: string, initialValue: T) {
 
 export function ConsolePage() {
   const apiKey = localStorage.getItem('tmp::voice_api_key') || '';
-  const tvly = tavily({ apiKey: "tvly-YOUR_API_KEY" });
+  const tavilyApiKey = localStorage.getItem('tmp::tvly_api_key') || '';
 
   /**
    * Instantiate:
@@ -107,12 +107,12 @@ export function ConsolePage() {
     [key: string]: boolean;
   }>({});
   const [isConnected, setIsConnected] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
 
   const getItemText = (item: ItemType) => {
     const text = (item.formatted.transcript ? item.formatted.transcript : item.formatted.text || '').trim();
     if (text.length == 0) {
-      console.log('getItemText', { item });
       if ((item as any).content) { // SystemItemType|UserItemType|AssistantItemType
         return (item as any).content.map((c: any) => c.transcript).join('');
       }
@@ -128,6 +128,15 @@ export function ConsolePage() {
     if (apiKey !== null) {
       localStorage.clear();
       localStorage.setItem('tmp::voice_api_key', apiKey);
+      window.location.reload();
+    }
+  }, []);
+
+  const resetTavilyApiKey = useCallback(() => {
+    const apiKey = prompt('Tavily API Key');
+    if (apiKey !== null) {
+      localStorage.clear();
+      localStorage.setItem('tmp::tvly_api_key', apiKey);
       window.location.reload();
     }
   }, []);
@@ -426,30 +435,35 @@ export function ConsolePage() {
     client.addTool(
       {
         name: 'search_web',
-        description: 'Searches the web for up to date information, beyond your training data available.',
+        description: 'Searches the web for up to date information, use when asked beyond your training data available, or when asked about current events.',
         parameters: {
           type: 'object',
           properties: {
-            key: {
+            search: {
               type: 'string',
               description:
-                'The key of the memory value. Always use lowercase and underscores, no other characters.',
-            },
-            value: {
-              type: 'string',
-              description: 'Value can be anything represented as a string',
+                'The search query to search the web with. Example: "What is the weather in Tokyo?"',
             },
           },
-          required: ['key', 'value'],
+          required: ['search'],
         },
       },
-      async ({ key, value }: { [key: string]: any }) => {
-        // Step 1. Instantiating your Tavily client
-        const tvly = tavily({ apiKey: "tvly-YOUR_API_KEY" });
-
-        // Step 2. Executing a Q&A search query
-        // const answer = tvly.searchQNA("Who is Leo Messi?");
-        return { ok: true };
+      // TODO: any issues with items function_calls, in UI or logic? and also in messagesList, should be retained for later?
+      // TODO: Fix UI mobile logic
+      async ({ search }: { [search: string]: any }) => {
+        console.log('search_web', { search });
+        try {
+          const tvly = tavily({ apiKey: tavilyApiKey });
+          const answer = await tvly.searchQNA(search, {
+            searchDepth: 'basic',
+            topic: 'general',
+            maxResults: 5,
+          });
+          console.log('search_web answer', { answer });
+          return { "result": answer };
+        } catch (e) {
+          return { "result": "Don't have access to web searches, check your API Key." }
+        }
       }
     );
 
@@ -587,15 +601,24 @@ export function ConsolePage() {
       <div className="content-top">
         <div className="content-title">
           <img src="/openai-logomark.svg" alt="" />
-          <span>realtime console</span>
+          {window.innerWidth > 768 && <span>realtime console</span>}
         </div>
         <div className="content-api-key">
           <Button
             icon={Edit}
             iconPosition="end"
             buttonStyle="flush"
-            label={`api key: ${apiKey.slice(0, 3)}...`}
+            label={`OpenAI: ${apiKey.slice(0, 3)}...`}
             onClick={() => resetAPIKey()}
+          />
+        </div>
+        <div className="content-api-key">
+          <Button
+            icon={Edit}
+            iconPosition="end"
+            buttonStyle="flush"
+            label={`Tavily: ${tavilyApiKey.slice(0, 3)}...`}
+            onClick={() => resetTavilyApiKey()}
           />
         </div>
       </div>
@@ -763,35 +786,68 @@ export function ConsolePage() {
                 isConnected ? disconnectConversation : () => connectConversation(false)
               }
             />
-            <div className="spacer" />
-            <div>
-              <div className="visualization">
-                <div className="visualization-entry client">
-                  <canvas ref={clientCanvasRef} />
-                </div>
-                <div className="visualization-entry server">
-                  <canvas ref={serverCanvasRef} />
+            {window.innerWidth > 768 && <div className="spacer" />}
+            {window.innerWidth > 768 && (
+              <div>
+                <div className="visualization">
+                  <div className="visualization-entry client">
+                    <canvas ref={clientCanvasRef} />
+                  </div>
+                  <div className="visualization-entry server">
+                    <canvas ref={serverCanvasRef} />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
             <div className="spacer" />
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <Button
-                label="Clear and start new"
-                iconPosition="start"
-                icon={X}
-                buttonStyle="alert"
-                onClick={clearData}
-              />
-              <Button
-                label="Copy conversation"
-                iconPosition="start"
-                icon={Zap}
-                buttonStyle="action"
-                style={{ marginTop: '8px' }}
-                onClick={copyConversation}
-              />
-            </div>
+            {window.innerWidth > 768 ? (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <Button
+                  label="Clear and start new"
+                  iconPosition="start"
+                  icon={X}
+                  buttonStyle="alert"
+                  onClick={clearData}
+                />
+                <Button
+                  label="Copy conversation"
+                  iconPosition="start"
+                  icon={Zap}
+                  buttonStyle="action"
+                  style={{ marginTop: '8px' }}
+                  onClick={copyConversation}
+                />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <Button
+                  label="Settings"
+                  iconPosition="start"
+                  icon={Edit}
+                  buttonStyle="action"
+                  onClick={() => setShowSettings(!showSettings)}
+                />
+                {showSettings && (
+                  <div style={{ display: 'flex', flexDirection: 'column', marginTop: '8px' }}>
+                    <Button
+                      label="Clear and start new"
+                      iconPosition="start"
+                      icon={X}
+                      buttonStyle="alert"
+                      onClick={clearData}
+                    />
+                    <Button
+                      label="Copy conversation"
+                      iconPosition="start"
+                      icon={Zap}
+                      buttonStyle="action"
+                      style={{ marginTop: '8px' }}
+                      onClick={copyConversation}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             <div />
           </div>
         </div>
