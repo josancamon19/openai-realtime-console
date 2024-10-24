@@ -687,7 +687,7 @@ export function ConsolePage() {
                           <div>
                             {conversationItem.formatted.transcript ||
                               conversationItem.formatted.text ||
-                              '(truncated)'}
+                              '(tru ncated)'}
                           </div>
                         )}
 
