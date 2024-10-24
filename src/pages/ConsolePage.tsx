@@ -448,8 +448,6 @@ export function ConsolePage() {
           required: ['search'],
         },
       },
-      // TODO: any issues with items function_calls, in UI or logic? and also in messagesList, should be retained for later?
-      // TODO: Fix UI mobile logic
       async ({ search }: { [search: string]: any }) => {
         console.log('search_web', { search });
         try {
