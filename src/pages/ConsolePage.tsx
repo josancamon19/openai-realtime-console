@@ -12,8 +12,8 @@ import { Button } from '../components/button/Button';
 
 import './ConsolePage.scss';
 import { clearInt16Arrays, getAllInt16Arrays, getInt16Array, upsertInt16Array } from '../utils/db.js';
-import { disconnect } from 'process';
 import { tavily } from '@tavily/core';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * Type for all event logs
@@ -52,6 +52,26 @@ function useLocalStorage<T>(key: string, initialValue: T) {
 export function ConsolePage() {
   const apiKey = localStorage.getItem('tmp::voice_api_key') || '';
   const tavilyApiKey = localStorage.getItem('tmp::tvly_api_key') || '';
+
+  const navigate = useNavigate();
+  const searchParams = new URLSearchParams(window.location.search);
+  const topicUuid = searchParams.get('uuid') || '123';
+  const [topic, setTopic] = useState<{ title: string; uuid: string } | null>(null);
+
+  useEffect(() => {
+    if (topicUuid) {
+      const storedTopics = JSON.parse(localStorage.getItem('topics') || '[]') || [];
+      const topic = storedTopics.find((topic: { uuid: string }) => topic.uuid === topicUuid);
+      console.log('topic', { topic });
+      if (!topic) {
+        navigate('/');
+      } else {
+        setTopic(topic);
+      }
+    } else {
+      navigate('/');
+    }
+  }, []);
 
   /**
    * Instantiate:
@@ -94,7 +114,7 @@ export function ConsolePage() {
   // const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
   const [items, setItems] = useState<ItemType[]>([]);
   // fallback because couldn't get it to work using items history and restoring the session.
-  const [messageList, setMessageList] = useLocalStorage<{ id: string, sender: string, message: string }[]>('messageHistory', []);
+  const [messageList, setMessageList] = useLocalStorage<{ id: string, sender: string, message: string }[]>(`${topicUuid}::messageHistory`, []);
   const [messageListCopy, setMessageListCopy] = useState<{ id: string, sender: string, message: string }[]>([]);
   useEffect(() => {
     setMessageListCopy(messageList);
@@ -424,7 +444,8 @@ export function ConsolePage() {
     if (messageList.length > 0) {
       instructionsCopy = instructionsCopy + `\n\nThe following is a history of our previous conversation:\n${messageList.map(message => `${message.sender}: ${message.message}`).join('\n')}`;
     }
-    // Set instructions
+    instructionsCopy = instructionsCopy + `\n\nThe following is the current topic of interest:\n${topic!.title}`;
+
     client.updateSession({
       instructions: instructionsCopy,
       input_audio_transcription: { model: 'whisper-1' },
@@ -561,6 +582,7 @@ export function ConsolePage() {
    * Setup session on mount
    */
   useEffect(() => {
+    if (topic == null) return;
     const wavStreamPlayer = wavStreamPlayerRef.current;
     const client = clientRef.current;
     setupSession(client, wavStreamPlayer);
@@ -569,13 +591,14 @@ export function ConsolePage() {
       // cleanup; resets to defaults
       client.reset();
     };
-  }, []);
+  }, [topic]);
 
   const clearData = async () => {
     copyConversation();
     setItems([]);
     setMessageList([]);
     setMessageListCopy([]);
+
     try {
       await clearInt16Arrays();
       console.log('IndexedDB data cleared successfully.');
