@@ -56,6 +56,8 @@ export function HomePage() {
                                     const updatedTopics = topics.filter(t => t.uuid !== topic.uuid);
                                     setTopics(updatedTopics);
                                     localStorage.setItem('topics', JSON.stringify(updatedTopics));
+                                    localStorage.removeItem(`${topic.uuid}::mermaidGraph`);
+                                    localStorage.removeItem(`${topic.uuid}::messageHistory`);
                                 }
                             }}
                         >
