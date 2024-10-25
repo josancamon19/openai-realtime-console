@@ -38,9 +38,9 @@ export function HomePage() {
 
             <ul className="space-y-2 mb-4 w-full">
                 {topics.map((topic) => (
-                    <li 
-                        key={topic.uuid} 
-                        className="bg-white p-3 rounded shadow"
+                    <li
+                        key={topic.uuid}
+                        className="bg-white p-3 rounded shadow cursor-pointer hover:underline"
                         onClick={() => handleTopicClick(topic.uuid)}
                     >
                         {topic.title}
@@ -51,7 +51,7 @@ export function HomePage() {
             {!isAdding ? (
                 <button
                     onClick={() => setIsAdding(true)}
-                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                    className="w-full bg-black text-white font-bold py-2 px-4 rounded cursor-pointer"
                 >
                     Add New Topic
                 </button>
@@ -67,7 +67,7 @@ export function HomePage() {
                     <div className="flex space-x-2">
                         <button
                             type="submit"
-                            className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+                            className="flex-1 bg-black text-white font-bold py-2 px-4 rounded"
                         >
                             Save
                         </button>
