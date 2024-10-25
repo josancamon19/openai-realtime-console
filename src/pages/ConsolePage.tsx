@@ -656,12 +656,27 @@ export function ConsolePage() {
           [item.id]: wavFile,
         }));
       }
-      const itemsWithoutAudio = latestItems.map(item => {
+      const cleanedItems = latestItems.reduce<ItemType[]>((acc, item) => {
+        // TODO: skip empty ones
+        // TODO: make sure joins are working
         const { formatted, ...rest } = item;
-        return { ...rest, formatted: { ...formatted, audio: undefined, file: undefined } };
-      });
-      setItems(itemsWithoutAudio);
+        const newItem: ItemType = { ...rest, formatted: { ...formatted, audio: undefined, file: undefined } };
 
+        if (acc.length > 0) {
+          const lastItem = acc[acc.length - 1];
+
+          // Join if both user messages or both assistant messages
+          if ((lastItem.role === 'user' && newItem.role === 'user') ||
+            (lastItem.role === 'assistant' && newItem.role === 'assistant')) {
+            lastItem.formatted.transcript = `${getItemText(lastItem)} ${getItemText(newItem)}`.trim();
+            lastItem.formatted.text = lastItem.formatted.transcript;
+            return acc;
+          }
+        }
+
+        return [...acc, newItem];
+      }, []);
+      setItems(cleanedItems);
 
       setMessageList((prevMessageList) => {
         const updatedMessageList = [...prevMessageList];
@@ -767,7 +782,7 @@ export function ConsolePage() {
       <div className="items-center p-2 px-4 min-h-[40px] fixed top-0 left-0 right-0 bg-white z-50 border-b border-gray-300 flex-grow flex mx-4 overflow-hidden mb-6">
         <div className="flex-grow flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
           <img src="/openai-logomark.svg" alt="" className="w-6 h-6" />
-          {window.innerWidth > 768 && <span className='text-lg'>{topic?.title ?? 'Learning Dashboard'}</span>}
+          {window.innerWidth > 768 && <span className='text-lg line-clamp-1'>{topic?.title ?? 'Learning Dashboard'}</span>}
         </div>
         <div>
           <Button
@@ -790,9 +805,9 @@ export function ConsolePage() {
       </div>
 
       {/* Conversation */}
-      <div className="flex-grow flex flex-col w-1/2 mt-16 pl-2 pr-8 border-r border-gray-300 relative max-h-full mb-20 text-[#babaee] pt-1 pb-2 leading-[1.2] overflow-auto" data-conversation-content>
+      <div className={`flex-grow flex flex-col ${window.innerWidth < 768 ? 'w-full' : 'w-1/2 border-r border-gray-300'} mt-16 pl-2 pr-8  relative max-h-full mb-20 text-[#8e8e8e] pt-1 pb-2 leading-[1.2] overflow-auto`} data-conversation-content>
         {messageListCopy.length > 0 && (
-          <div className="mb-4 mt-2 text-base text-gray-500">Previous conversation:</div>
+          <div className="mb-4 mt-2 text-base text-gray-500">Previous messages:</div>
         )}
         {messageListCopy.length > 0 && (
           <div className="mb-8">
@@ -810,12 +825,13 @@ export function ConsolePage() {
         )}
 
         {/* Most recent session conversation */}
-        {items.length && <div className="mb-4 mt-2 text-base text-gray-500">Current conversation:</div>}
+        {items.length && <div className="mb-4 mt-2 text-base text-gray-500">Most Recent:</div>}
         {items.map((conversationItem) => (
           <div className="relative flex gap-4 mb-4 group" key={conversationItem.id}>
             <div
-              className={`relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${conversationItem.role === 'user' ? 'text-[#0099ff]' : 'text-[#009900]'
-                }`}
+              className={`
+                relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${conversationItem.role === 'user' ? 'text-[#0099ff]' : conversationItem.role === 'assistant'? 'text-[#009900]': ''}
+                `}
             >
               <div className='text-sm'>
                 {getItemRole(conversationItem)}
@@ -827,7 +843,7 @@ export function ConsolePage() {
                 <X className="stroke-current w-3 h-3" />
               </div> */}
             </div>
-            <div className="text-[#18181b] overflow-hidden break-words">
+            <div className="text-[#18181b] overflow-hidden break-words text-sm">
               {/* Tool response */}
               {conversationItem.type === 'function_call_output' && (
                 <div>{conversationItem.formatted.output}</div>
@@ -863,7 +879,8 @@ export function ConsolePage() {
       </div>
 
       {/* Mermaid Graph */}
-      {mermaidGraph && <ZoomableDiv>
+      {/* TODO: visible in mobile but with a setting*/}
+      {mermaidGraph && window.innerWidth > 768 && <ZoomableDiv>
         <pre id="mermaid-graph" className="mermaid mx-auto max-w-3xl">
           {mermaidGraph}
         </pre>
