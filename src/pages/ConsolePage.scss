@@ -40,6 +40,11 @@
     display: flex;
     overflow: hidden;
     margin-bottom: 24px;
+    .content-wrapper {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+    }
     .content-block {
       position: relative;
       display: flex;
@@ -53,7 +58,7 @@
         position: relative;
       }
       .content-block-body {
-        color: #6e6e7f;
+        color: #babaee;
         position: relative;
         flex-grow: 1;
         padding: 8px 0px;

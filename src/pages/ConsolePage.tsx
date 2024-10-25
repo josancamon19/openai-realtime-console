@@ -16,6 +16,7 @@ import { tavily } from '@tavily/core';
 import { useNavigate } from 'react-router-dom';
 
 import OpenAI from 'openai';
+import mermaid from 'mermaid';
 
 /**
  * Type for all event logs
@@ -134,21 +135,26 @@ export function ConsolePage() {
   const [mostRecentImage, setMostRecentImage] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
+  const [mermaidGraph, setMermaidGraph] = useLocalStorage<string>(`${topicUuid}::mermaidGraph`, '');
+  const [lastMermaidGraphMessageId, setLastMermaidGraphMessageId] = useState<string | null>(null);
+  const [isGeneratingMermaidGraph, setIsGeneratingMermaidGraph] = useState(false);
+
   const generateImage = async () => {
     if (isGeneratingImage) return;
     setIsGeneratingImage(true);
     const openai = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
     const recentMessages = messageList.slice(-5);
+    
     const completion = await openai.chat.completions.create({
       messages: [{
         role: "system", content: `
         Based on the following study topic: ${topic!.title}
-        And from the following conversation:
+        And from the last ${recentMessages.length} messages of the teacher-student conversation:
         \`\`\`
         ${recentMessages.map((message) => `${message.sender}: ${message.message}`).join('\n')}
         \`\`\`
         Generate a prompt with the following format:
-        "Design a visually appealing infographic that effectively communicates complex data and statistics. Incorporate eye-catching visuals, clear headings, and concise text to engage and inform the audience: [Insert data and key points for the infographic]"
+        "Create an minimalistic illustration for explaining [concept]. Show [key element 1], [key element 2], and [key element 3] using [visual metaphor]. Use arrows to indicate [relationship]. Label each part clearly. Style should be minimalistic, clean, colorless, and easy to understand."
         ` }],
       model: "gpt-4o",
     });
@@ -161,15 +167,60 @@ export function ConsolePage() {
     setIsGeneratingImage(false);
   };
 
+  const generateMermaidGraph = async () => {
+    if (isGeneratingMermaidGraph) return;
+    setIsGeneratingMermaidGraph(true);
+
+    const openai = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
+    const recentMessages = lastMermaidGraphMessageId
+      ? messageList.slice(messageList.findIndex(message => message.id === lastMermaidGraphMessageId) + 1)
+      : messageList.slice(-5);
+    setLastMermaidGraphMessageId(recentMessages[recentMessages.length - 1].id);
+
+    if (recentMessages.length == 0) {
+      setIsGeneratingMermaidGraph(false);
+      return;
+    }
+
+    const completion = await openai.chat.completions.create({
+      messages: [{
+        role: "system", content: `
+        Generate mermaid code (graph) for the following transcript of a study conversation:
+        Make the chart only related to the main study topic: "${topic!.title}" 
+        Make sure the chart explains the core concepts mentioned, key characteristics + depth of concepts, and relationships between them.
+        \`\`\`
+        ${recentMessages.map((message) => `${message.sender}: ${message.message}`).join('\n')}
+        \`\`\`
+
+        ${mermaidGraph ? `Make sure to iterate over the previous mermaid graph and update it with the new conversation (if any new concepts are mentioned):
+        \`\`\`
+        ${mermaidGraph}
+        \`\`\`
+        ` : ''}
+        ` }],
+      model: "gpt-4o",
+    });
+    const content = completion.choices[0].message.content!;
+    const regex = /```([^`]+)```/;
+    const match = content.match(regex);
+    const extractedContent = (match ? match[1].trim() : '').replaceAll('"', '').replaceAll('mermaid', '').trim();
+    console.log('extracted mermaid graph:', { extractedContent });
+    setMermaidGraph(extractedContent);
+    setIsGeneratingMermaidGraph(false);
+    await mermaid.run({
+      nodes: [document.getElementById('mermaid-graph')!],
+    });
+  };
+
   useEffect(() => {
     if (topic && messageList.length % 5 === 0 && messageList.length > 0 && window.innerWidth > 768) {
-      generateImage();
+      generateMermaidGraph();
     }
   }, [messageList]);
 
   useEffect(() => {
     if (!topic) return;
-    generateImage();
+    generateMermaidGraph();
   }, [topic]);
 
 
@@ -687,79 +738,6 @@ export function ConsolePage() {
       </div>
       <div className="content-main">
         <div className="content-logs">
-          {/* <div className="content-block events">
-            <div className="visualization">
-              <div className="visualization-entry client">
-                <canvas ref={clientCanvasRef} />
-              </div>
-              <div className="visualization-entry server">
-                <canvas ref={serverCanvasRef} />
-              </div>
-            </div>
-            <div className="content-block-title">events</div>
-            <div className="content-block-body" ref={eventsScrollRef}>
-              {!realtimeEvents.length && `awaiting connection...`}
-              {realtimeEvents.map((realtimeEvent, i) => {
-                const count = realtimeEvent.count;
-                const event = { ...realtimeEvent.event };
-                if (event.type === 'input_audio_buffer.append') {
-                  event.audio = `[trimmed: ${event.audio.length} bytes]`;
-                } else if (event.type === 'response.audio.delta') {
-                  event.delta = `[trimmed: ${event.delta.length} bytes]`;
-                }
-                return (
-                  <div className="event" key={event.event_id}>
-                    <div className="event-timestamp">
-                      {formatTime(realtimeEvent.time)}
-                    </div>
-                    <div className="event-details">
-                      <div
-                        className="event-summary"
-                        onClick={() => {
-                          // toggle event details
-                          const id = event.event_id;
-                          const expanded = { ...expandedEvents };
-                          if (expanded[id]) {
-                            delete expanded[id];
-                          } else {
-                            expanded[id] = true;
-                          }
-                          setExpandedEvents(expanded);
-                        }}
-                      >
-                        <div
-                          className={`event-source ${event.type === 'error'
-                            ? 'error'
-                            : realtimeEvent.source
-                            }`}
-                        >
-                          {realtimeEvent.source === 'client' ? (
-                            <ArrowUp />
-                          ) : (
-                            <ArrowDown />
-                          )}
-                          <span>
-                            {event.type === 'error'
-                              ? 'error!'
-                              : realtimeEvent.source}
-                          </span>
-                        </div>
-                        <div className="event-type">
-                          {event.type}
-                          {count && ` (${count})`}
-                        </div>
-                      </div>
-                      {!!expandedEvents[event.event_id] && (
-                        <div className="event-payload">
-                          {JSON.stringify(event, null, 2)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div> */}
           <div className="content-block events">
             <div className="content-block-title">conversation</div>
             <div className="content-block-body" data-conversation-content>
@@ -894,16 +872,19 @@ export function ConsolePage() {
             <div />
           </div>
         </div>
-        <div style={{ height: '16px' }} />
         {window.innerWidth > 768 && (
-          <div className="content-image">
-            {mostRecentImage && (
-              <div className="image-container">
-                <img src={mostRecentImage} alt="Most Recent" />
-              </div>
-            )}
-          </div>
-        )}
+            <pre id="mermaid-graph" className="mermaid" style={{ width: '100%' }}>
+              {mermaidGraph}
+            </pre>
+            // <div className="content-image">
+            //   {mostRecentImage && (
+            //     <div className="image-container">
+            //       <img src={mostRecentImage} alt="Most Recent" />
+            //     </div>
+            //   )}
+            // </div>
+          )}
+
       </div>
     </div>
   );
