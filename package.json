@@ -20,6 +20,8 @@
     "react-dom": "^18.3.1",
     "react-feather": "^2.0.10",
     "react-leaflet": "^4.2.1",
+    "react-router": "^6.27.0",
+    "react-router-dom": "^6.27.0",
     "react-scripts": "^5.0.1",
     "sass": "^1.78.0",
     "save": "^2.9.0",
@@ -55,6 +57,9 @@
   },
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
-    "nodemon": "^3.1.7"
+    "autoprefixer": "^10.4.20",
+    "nodemon": "^3.1.7",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14"
   }
 }

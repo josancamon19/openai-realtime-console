@@ -33,12 +33,16 @@ export function HomePage() {
     };
 
     return (
-        <div className="container mx-auto px-4 py-8">
-            <h1 className="text-3xl font-bold mb-6 text-center">My Learning Project</h1>
+        <div className="container mx-auto px-4 py-8 flex flex-col items-center">
+            <h1 className="text-3xl font-bold mb-6 text-center">Learning Topics</h1>
 
-            <ul className="space-y-2 mb-4">
+            <ul className="space-y-2 mb-4 w-full">
                 {topics.map((topic) => (
-                    <li key={topic.uuid} className="bg-white p-3 rounded shadow">
+                    <li 
+                        key={topic.uuid} 
+                        className="bg-white p-3 rounded shadow"
+                        onClick={() => handleTopicClick(topic.uuid)}
+                    >
                         {topic.title}
                     </li>
                 ))}
@@ -52,7 +56,7 @@ export function HomePage() {
                     Add New Topic
                 </button>
             ) : (
-                <form onSubmit={handleAddTopic} className="space-y-2">
+                <form onSubmit={handleAddTopic} className="space-y-2 w-full">
                     <input
                         type="text"
                         value={newTopic}
