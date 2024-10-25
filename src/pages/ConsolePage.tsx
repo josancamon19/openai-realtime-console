@@ -15,6 +15,8 @@ import { clearInt16Arrays, getAllInt16Arrays, getInt16Array, upsertInt16Array } 
 import { tavily } from '@tavily/core';
 import { useNavigate } from 'react-router-dom';
 
+import OpenAI from 'openai';
+
 /**
  * Type for all event logs
  */
@@ -128,6 +130,47 @@ export function ConsolePage() {
   }>({});
   const [isConnected, setIsConnected] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  const [mostRecentImage, setMostRecentImage] = useState<string | null>(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+
+  const generateImage = async () => {
+    if (isGeneratingImage) return;
+    setIsGeneratingImage(true);
+    const openai = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
+    const recentMessages = messageList.slice(-5);
+    const completion = await openai.chat.completions.create({
+      messages: [{
+        role: "system", content: `
+        Based on the following study topic: ${topic!.title}
+        And from the following conversation:
+        \`\`\`
+        ${recentMessages.map((message) => `${message.sender}: ${message.message}`).join('\n')}
+        \`\`\`
+        Generate a prompt with the following format:
+        "Design a visually appealing infographic that effectively communicates complex data and statistics. Incorporate eye-catching visuals, clear headings, and concise text to engage and inform the audience: [Insert data and key points for the infographic]"
+        ` }],
+      model: "gpt-4o",
+    });
+    const prompt = completion.choices[0].message.content!;
+    console.log('dallee prompt', { prompt });
+    const image = await openai.images.generate({ model: "dall-e-3", prompt: prompt });
+
+    console.log({ images: image.data });
+    setMostRecentImage(image.data[0].url!);
+    setIsGeneratingImage(false);
+  };
+
+  useEffect(() => {
+    if (topic && messageList.length % 5 === 0 && messageList.length > 0 && window.innerWidth > 768) {
+      generateImage();
+    }
+  }, [messageList]);
+
+  useEffect(() => {
+    if (!topic) return;
+    generateImage();
+  }, [topic]);
 
 
   const getItemText = (item: ItemType) => {
@@ -851,6 +894,16 @@ export function ConsolePage() {
             <div />
           </div>
         </div>
+        <div style={{ height: '16px' }} />
+        {window.innerWidth > 768 && (
+          <div className="content-image">
+            {mostRecentImage && (
+              <div className="image-container">
+                <img src={mostRecentImage} alt="Most Recent" />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
