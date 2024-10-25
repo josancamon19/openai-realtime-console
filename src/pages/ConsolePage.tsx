@@ -7,7 +7,7 @@ import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
-import { X, Edit, Zap, ArrowUp, ArrowDown, MessageCircle, Copy, Settings } from 'react-feather';
+import { X, Edit, Zap, ArrowUp, ArrowDown, MessageCircle, Copy, Settings, RefreshCw } from 'react-feather';
 import { Button } from '../components/button/Button';
 
 // import { clearInt16Arrays, getAllInt16Arrays, getInt16Array, upsertInt16Array } from '../utils/db.js';
@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 
 import OpenAI from 'openai';
 import mermaid from 'mermaid';
+import { ZoomableDiv } from '../components/ZoomableDiv';
 
 /**
  * Type for all event logs
@@ -176,24 +177,17 @@ export function ConsolePage() {
     setIsGeneratingMermaidGraph(true);
 
     const openai = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
-    const recentMessages = lastMermaidGraphMessageId
-      ? messageList.slice(messageList.findIndex(message => message.id === lastMermaidGraphMessageId) + 1)
-      : messageList.slice(-5);
-    setLastMermaidGraphMessageId(recentMessages[recentMessages.length - 1].id);
-    // TODO: check this is skipping the empty case properly
-    if (recentMessages.length == 0) {
-      setIsGeneratingMermaidGraph(false);
-      return;
-    }
 
     const completion = await openai.chat.completions.create({
       messages: [{
         role: "system", content: `
         Generate mermaid code (graph) for the following transcript of a study conversation:
-        Make the chart only related to the main study topic: "${topic!.title}" 
-        Make sure the chart explains the core concepts mentioned, key characteristics + depth of concepts, and relationships between them.
+        Ignore any messages that are not related to the study topic: "${topic!.title}"
+
+        Make sure the chart shows the relationships between all the concepts learned. The simpler the better.
+
         \`\`\`
-        ${recentMessages.map((message) => `${message.sender}: ${message.message}`).join('\n')}
+        ${messageList.map((message) => `${message.sender}: ${message.message}`).join('\n')}
         \`\`\`
 
         ${mermaidGraph ? `Make sure to iterate over the previous mermaid graph and update it with the new conversation (if any new concepts are mentioned):
@@ -209,13 +203,45 @@ export function ConsolePage() {
     const match = content.match(regex);
     const extractedContent = (match ? match[1].trim() : '').replaceAll('"', '').replaceAll('mermaid', '').trim();
     console.log('extracted mermaid graph:', { extractedContent });
-    setMermaidGraph(extractedContent);
-    // TODO: this is not refreshing as expected
-    setIsGeneratingMermaidGraph(false);
-    await mermaid.run({
-      nodes: [document.getElementById('mermaid-graph')!],
-    });
+    setMermaidGraph('');
+    setTimeout(() => {
+      setMermaidGraph(extractedContent);
+      setIsGeneratingMermaidGraph(false);
+    }, 1000);
   };
+
+  const drawDiagram = async function () {
+    const mermaidElement = document.getElementById('mermaid-graph');
+    if (!mermaidElement) return;
+    const { svg } = await mermaid.render('mermaid-graph', mermaidGraph);
+    console.log('svg', { svg, mermaidElement });
+    mermaidElement!.innerHTML = svg;
+  };
+
+  useEffect(() => {
+    console.log('refreshing mermaidGraph', { mermaidGraph });
+    const mermaidElement = document.getElementById('mermaid-graph');
+    console.log('mermaidElement', { mermaidElement });
+    if (mermaidElement) {
+      try {
+        mermaid.run({ nodes: [mermaidElement], suppressErrors: true, });
+      } catch (e) {
+        console.error('Error running mermaid:', e);
+      }
+    } else {
+      console.warn('Mermaid graph element not found');
+    }
+    // drawDiagram();
+  }, [mermaidGraph]);
+
+
+  // useEffect(() => {
+  //   try {
+  //     mermaid.run({ nodes: [document.getElementById('mermaid-graph')!] });
+  //   } catch (e) {
+  //     console.log('Error running mermaid:', e);
+  //   }
+  // }, []);
 
   useEffect(() => {
     if (topic && messageList.length % 5 === 0 && messageList.length > 0 && window.innerWidth > 768) {
@@ -837,13 +863,12 @@ export function ConsolePage() {
       </div>
 
       {/* Mermaid Graph */}
-      <div className="w-1/2 pl-4 overflow-y-auto fixed right-0 top-20 bottom-0 bg-white">
-        {mermaidGraph && window.innerWidth > 768 && (
-          <pre id="mermaid-graph" className="mermaid w-full">
-            {mermaidGraph}
-          </pre>
-        )}
-      </div>
+      {mermaidGraph && <ZoomableDiv>
+        <pre id="mermaid-graph" className="mermaid mx-auto max-w-3xl">
+          {mermaidGraph}
+        </pre>
+        {/* <div id="mermaid-graph" className="mermaid mx-auto max-w-3xl"/> */}
+      </ZoomableDiv>}
 
       {/* Action Buttons */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex items-center justify-center gap-4 p-4">
@@ -885,6 +910,17 @@ export function ConsolePage() {
                 icon={MessageCircle}
                 buttonStyle="action"
                 onClick={openInChatGPT}
+              />
+              <Button
+                label="Regenerate Graph"
+                iconPosition="start"
+                icon={RefreshCw}
+                buttonStyle="action"
+                className="mt-2"
+                onClick={() => {
+                  setMermaidGraph('');
+                  generateMermaidGraph();
+                }}
               />
               <Button
                 label="Copy Transcript"
