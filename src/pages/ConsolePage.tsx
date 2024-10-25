@@ -131,6 +131,14 @@ export function ConsolePage() {
   const [lastMermaidGraphMessageId, setLastMermaidGraphMessageId] = useState<string | null>(null);
   const [isGeneratingMermaidGraph, setIsGeneratingMermaidGraph] = useState(false);
 
+  const getItemRole = (item: ItemType | any) => {
+    const role = item.role || item.sender;
+    if (role) {
+      return role === 'user' ? 'you' : 'assistant';
+    }
+    return item.type.replaceAll('_', ' ');
+  }
+
   // const [mostRecentImage, setMostRecentImage] = useState<string | null>(null);
   // const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
@@ -733,7 +741,7 @@ export function ConsolePage() {
       <div className="items-center p-2 px-4 min-h-[40px] fixed top-0 left-0 right-0 bg-white z-50 border-b border-gray-300 flex-grow flex mx-4 overflow-hidden mb-6">
         <div className="flex-grow flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
           <img src="/openai-logomark.svg" alt="" className="w-6 h-6" />
-          {window.innerWidth > 768 && <span>Learning Dashboard</span>}
+          {window.innerWidth > 768 && <span className='text-lg'>{topic?.title ?? 'Learning Dashboard'}</span>}
         </div>
         <div>
           <Button
@@ -756,7 +764,7 @@ export function ConsolePage() {
       </div>
 
       {/* Conversation */}
-      <div className="flex-grow flex flex-col w-1/2 mt-16 pl-2 pr-4 border-r border-gray-300 relative max-h-full mb-20 text-[#babaee] pt-1 pb-2 leading-[1.2] overflow-auto" data-conversation-content>
+      <div className="flex-grow flex flex-col w-1/2 mt-16 pl-2 pr-8 border-r border-gray-300 relative max-h-full mb-20 text-[#babaee] pt-1 pb-2 leading-[1.2] overflow-auto" data-conversation-content>
         {messageListCopy.length > 0 && (
           <div className="mb-4 mt-2 text-base text-gray-500">Previous conversation:</div>
         )}
@@ -764,32 +772,34 @@ export function ConsolePage() {
           <div className="mb-8">
             {messageListCopy.map((message) => (
               <div className="relative flex gap-4 mb-4" key={message.id}>
-                <div className={`relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${message.sender === 'user' ? 'text-[#0099ff]' : 'text-[#009900]'} font-medium`}>
-                  <div>{message.sender === 'user' ? 'You' : 'Assistant'}</div>
+                <div className={`relative text-left text-sm gap-4 w-20 flex-shrink-0 mr-4 ${message.sender === 'user' ? 'text-[#0099ff]' : 'text-[#009900]'} font-medium`}>
+                  <div>{getItemRole(message)}</div>
                 </div>
-                <div className="text-[#18181b] overflow-hidden break-words">
+                <div className="text-[#18181b] overflow-hidden break-words text-sm">
                   {message.message}
                 </div>
               </div>
             ))}
           </div>
         )}
-        {items.length && <div className="h-3">Current conversation:</div>}
+
+        {/* Most recent session conversation */}
+        {items.length && <div className="mb-4 mt-2 text-base text-gray-500">Current conversation:</div>}
         {items.map((conversationItem) => (
           <div className="relative flex gap-4 mb-4 group" key={conversationItem.id}>
             <div
               className={`relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${conversationItem.role === 'user' ? 'text-[#0099ff]' : 'text-[#009900]'
                 }`}
             >
-              <div>
-                {(conversationItem.role || conversationItem.type).replaceAll('_', ' ')}
+              <div className='text-sm'>
+                {getItemRole(conversationItem)}
               </div>
-              <div
-                className="absolute top-0 -right-5 bg-gray-400 text-white flex rounded-full p-0.5 cursor-pointer hidden group-hover:flex hover:bg-gray-600"
+              {/* <div
+                className="absolute top-0 -right-5 bg-gray-400 text-white rounded-full p-0.5 cursor-pointer hidden group-hover:flex hover:bg-gray-600"
                 onClick={() => deleteConversationItem(conversationItem.id)}
               >
                 <X className="stroke-current w-3 h-3" />
-              </div>
+              </div> */}
             </div>
             <div className="text-[#18181b] overflow-hidden break-words">
               {/* Tool response */}
@@ -804,7 +814,7 @@ export function ConsolePage() {
                 </div>
               )}
               {!conversationItem.formatted.tool && conversationItem.role === 'user' && (
-                <div>
+                <div className='text-sm'>
                   {conversationItem.formatted.transcript ||
                     (conversationItem.formatted.audio?.length
                       ? '(awaiting transcript)'
@@ -812,7 +822,7 @@ export function ConsolePage() {
                 </div>
               )}
               {!conversationItem.formatted.tool && conversationItem.role === 'assistant' && (
-                <div>{getItemText(conversationItem) || '(truncated)'}</div>
+                <div className='text-sm'>{getItemText(conversationItem) || '(truncated)'}</div>
               )}
               {audioFiles[conversationItem.id] && conversationItem.role === 'assistant' && (
                 <audio
