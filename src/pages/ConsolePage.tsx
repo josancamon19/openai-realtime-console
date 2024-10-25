@@ -185,12 +185,13 @@ export function ConsolePage() {
         Ignore any messages that are not related to the study topic: "${topic!.title}"
 
         Make sure the chart shows the relationships between all the concepts learned. The simpler the better.
+        Do not expand the graph beyond things not mentioned in the conversation.
 
         \`\`\`
         ${messageList.map((message) => `${message.sender}: ${message.message}`).join('\n')}
         \`\`\`
 
-        ${mermaidGraph ? `Make sure to iterate over the previous mermaid graph and update it with the new conversation (if any new concepts are mentioned):
+        ${mermaidGraph ? `Make sure to use as the starting point, the previous mermaid graph and update it with any new information (if any):
         \`\`\`
         ${mermaidGraph}
         \`\`\`
