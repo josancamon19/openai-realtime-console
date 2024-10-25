@@ -7,11 +7,10 @@ import { WavRecorder, WavStreamPlayer } from '../lib/wavtools/index.js';
 import { instructions } from '../utils/conversation_config.js';
 import { WavRenderer } from '../utils/wav_renderer';
 
-import { X, Edit, Zap, ArrowUp, ArrowDown } from 'react-feather';
+import { X, Edit, Zap, ArrowUp, ArrowDown, MessageCircle, Copy, Settings } from 'react-feather';
 import { Button } from '../components/button/Button';
 
-import './ConsolePage.scss';
-import { clearInt16Arrays, getAllInt16Arrays, getInt16Array, upsertInt16Array } from '../utils/db.js';
+// import { clearInt16Arrays, getAllInt16Arrays, getInt16Array, upsertInt16Array } from '../utils/db.js';
 import { tavily } from '@tavily/core';
 import { useNavigate } from 'react-router-dom';
 
@@ -65,7 +64,7 @@ export function ConsolePage() {
     if (topicUuid) {
       const storedTopics = JSON.parse(localStorage.getItem('topics') || '[]') || [];
       const topic = storedTopics.find((topic: { uuid: string }) => topic.uuid === topicUuid);
-      console.log('topic', { topic });
+      // console.log('topic', { topic });
       if (!topic) {
         navigate('/');
       } else {
@@ -111,14 +110,12 @@ export function ConsolePage() {
    * All of our variables for displaying application state
    * - items are all conversation items (dialog)
    * - realtimeEvents are event logs, which can be expanded
-   * - memoryKv is for set_memory() function
    */
 
-  // const [items, setItems] = useLocalStorage<ItemType[]>('items', []);
   const [items, setItems] = useState<ItemType[]>([]);
-  // fallback because couldn't get it to work using items history and restoring the session.
   const [messageList, setMessageList] = useLocalStorage<{ id: string, sender: string, message: string }[]>(`${topicUuid}::messageHistory`, []);
   const [messageListCopy, setMessageListCopy] = useState<{ id: string, sender: string, message: string }[]>([]);
+
   useEffect(() => {
     setMessageListCopy(messageList);
   }, []);
@@ -126,46 +123,45 @@ export function ConsolePage() {
   const [audioFiles, setAudioFiles] = useState<{ [id: string]: any }>({});
 
   const [realtimeEvents, setRealtimeEvents] = useState<RealtimeEvent[]>([]);
-  const [expandedEvents, setExpandedEvents] = useState<{
-    [key: string]: boolean;
-  }>({});
+
   const [isConnected, setIsConnected] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-
-  const [mostRecentImage, setMostRecentImage] = useState<string | null>(null);
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
   const [mermaidGraph, setMermaidGraph] = useLocalStorage<string>(`${topicUuid}::mermaidGraph`, '');
   const [lastMermaidGraphMessageId, setLastMermaidGraphMessageId] = useState<string | null>(null);
   const [isGeneratingMermaidGraph, setIsGeneratingMermaidGraph] = useState(false);
 
-  const generateImage = async () => {
-    if (isGeneratingImage) return;
-    setIsGeneratingImage(true);
-    const openai = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
-    const recentMessages = messageList.slice(-5);
-    
-    const completion = await openai.chat.completions.create({
-      messages: [{
-        role: "system", content: `
-        Based on the following study topic: ${topic!.title}
-        And from the last ${recentMessages.length} messages of the teacher-student conversation:
-        \`\`\`
-        ${recentMessages.map((message) => `${message.sender}: ${message.message}`).join('\n')}
-        \`\`\`
-        Generate a prompt with the following format:
-        "Create an minimalistic illustration for explaining [concept]. Show [key element 1], [key element 2], and [key element 3] using [visual metaphor]. Use arrows to indicate [relationship]. Label each part clearly. Style should be minimalistic, clean, colorless, and easy to understand."
-        ` }],
-      model: "gpt-4o",
-    });
-    const prompt = completion.choices[0].message.content!;
-    console.log('dallee prompt', { prompt });
-    const image = await openai.images.generate({ model: "dall-e-3", prompt: prompt });
+  // const [mostRecentImage, setMostRecentImage] = useState<string | null>(null);
+  // const [isGeneratingImage, setIsGeneratingImage] = useState(false);
 
-    console.log({ images: image.data });
-    setMostRecentImage(image.data[0].url!);
-    setIsGeneratingImage(false);
-  };
+
+  // const generateImage = async () => {
+  //   if (isGeneratingImage) return;
+  //   setIsGeneratingImage(true);
+  //   const openai = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
+  //   const recentMessages = messageList.slice(-5);
+
+  //   const completion = await openai.chat.completions.create({
+  //     messages: [{
+  //       role: "system", content: `
+  //       Based on the following study topic: ${topic!.title}
+  //       And from the last ${recentMessages.length} messages of the teacher-student conversation:
+  //       \`\`\`
+  //       ${recentMessages.map((message) => `${message.sender}: ${message.message}`).join('\n')}
+  //       \`\`\`
+  //       Generate a prompt with the following format:
+  //       "Create an minimalistic illustration for explaining [concept]. Show [key element 1], [key element 2], and [key element 3] using [visual metaphor]. Use arrows to indicate [relationship]. Label each part clearly. Style should be minimalistic, clean, colorless, and easy to understand."
+  //       ` }],
+  //     model: "gpt-4o",
+  //   });
+  //   const prompt = completion.choices[0].message.content!;
+  //   console.log('dallee prompt', { prompt });
+  //   const image = await openai.images.generate({ model: "dall-e-3", prompt: prompt });
+
+  //   console.log({ images: image.data });
+  //   setMostRecentImage(image.data[0].url!);
+  //   setIsGeneratingImage(false);
+  // };
 
   const generateMermaidGraph = async () => {
     if (isGeneratingMermaidGraph) return;
@@ -176,7 +172,7 @@ export function ConsolePage() {
       ? messageList.slice(messageList.findIndex(message => message.id === lastMermaidGraphMessageId) + 1)
       : messageList.slice(-5);
     setLastMermaidGraphMessageId(recentMessages[recentMessages.length - 1].id);
-
+    // TODO: check this is skipping the empty case properly
     if (recentMessages.length == 0) {
       setIsGeneratingMermaidGraph(false);
       return;
@@ -206,6 +202,7 @@ export function ConsolePage() {
     const extractedContent = (match ? match[1].trim() : '').replaceAll('"', '').replaceAll('mermaid', '').trim();
     console.log('extracted mermaid graph:', { extractedContent });
     setMermaidGraph(extractedContent);
+    // TODO: this is not refreshing as expected
     setIsGeneratingMermaidGraph(false);
     await mermaid.run({
       nodes: [document.getElementById('mermaid-graph')!],
@@ -218,10 +215,10 @@ export function ConsolePage() {
     }
   }, [messageList]);
 
-  useEffect(() => {
-    if (!topic) return;
-    generateMermaidGraph();
-  }, [topic]);
+  // useEffect(() => {
+  //   if (!topic) return;
+  //   generateMermaidGraph();
+  // }, [topic]);
 
 
   const getItemText = (item: ItemType) => {
@@ -694,12 +691,32 @@ export function ConsolePage() {
     setMessageListCopy([]);
 
     try {
-      await clearInt16Arrays();
+      // await clearInt16Arrays();
       console.log('IndexedDB data cleared successfully.');
       window.location.reload();
     } catch (error) {
       console.error('Failed to clear IndexedDB data:', error);
     }
+  };
+
+  const openInChatGPT = async () => {
+    // TODO: get messages string function, instead of "sender" use student/teacher
+    const messages = messageList.map(message => `${message.sender}: ${message.message}\n`);
+    const conversation = messages.join('\n\n');
+
+    const prompt = `
+    You will review the transcript of a conversation between a student and a teacher, with the title of: "${topic?.title}".
+    Your task is to help the user solve any questions they may have about the conversation.
+    Additionally, you will provide corrections, further topics of interest for the student.
+    Here is the transcript of the conversation:
+
+    \`\`\`
+    ${conversation}
+    \`\`\`
+
+    If you understand the instructions, and have a clear idea of the conversation, respond with: "Hey 👋!\nWhat can I help you understand better todat?"
+    `.trim();
+    window.open(`https://chatgpt.com/?q=${prompt}`, '_blank');
   };
 
   const copyConversation = () => {
@@ -712,11 +729,11 @@ export function ConsolePage() {
    */
   return (
     <div data-component="ConsolePage" className="font-roboto-mono font-normal text-xs h-full flex flex-col overflow-hidden mx-2">
-      {/* Top Content */}
-      <div className="flex items-center p-2 px-4 min-h-[40px]">
-        <div className="flex-grow flex items-center gap-3">
+      {/* Header */}
+      <div className="items-center p-2 px-4 min-h-[40px] fixed top-0 left-0 right-0 bg-white z-50 border-b border-gray-300 flex-grow flex mx-4 overflow-hidden mb-6">
+        <div className="flex-grow flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
           <img src="/openai-logomark.svg" alt="" className="w-6 h-6" />
-          {window.innerWidth > 768 && <span>realtime console</span>}
+          {window.innerWidth > 768 && <span>Learning Dashboard</span>}
         </div>
         <div>
           <Button
@@ -737,325 +754,141 @@ export function ConsolePage() {
           />
         </div>
       </div>
-  
-      {/* Main Content */}
-      <div className="flex-grow flex mx-4 overflow-hidden mb-6">
-        <div className="flex-grow flex flex-col overflow-hidden">
-          <div className="relative flex flex-col max-h-full w-full border-t border-gray-300">
-            <div className="flex-shrink-0 pt-4 pb-1 relative">conversation</div>
-            <div className="text-[#babaee] relative flex-grow pt-1 pb-2 leading-[1.2] overflow-auto" data-conversation-content>
-              {messageListCopy.length > 0 && (
-                <div className="mb-2 mt-2">Previous conversation:</div>
-              )}
-              {messageListCopy.length > 0 && (
-                <div className="mb-8">
-                  {messageListCopy.map((message) => (
-                    <div className="relative flex gap-4 mb-4" key={message.id}>
-                      <div className={`relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${message.sender === 'user' ? 'text-[#0099ff]' : 'text-[#009900]'}`}>
-                        <div>{message.sender}</div>
-                      </div>
-                      <div className="text-[#18181b] overflow-hidden break-words">
-                        {message.message}
-                      </div>
-                    </div>
-                  ))}
+
+      {/* Conversation */}
+      <div className="flex-grow flex flex-col w-1/2 mt-16 pl-2 pr-4 border-r border-gray-300 relative max-h-full mb-20 text-[#babaee] pt-1 pb-2 leading-[1.2] overflow-auto" data-conversation-content>
+        {messageListCopy.length > 0 && (
+          <div className="mb-4 mt-2 text-base text-gray-500">Previous conversation:</div>
+        )}
+        {messageListCopy.length > 0 && (
+          <div className="mb-8">
+            {messageListCopy.map((message) => (
+              <div className="relative flex gap-4 mb-4" key={message.id}>
+                <div className={`relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${message.sender === 'user' ? 'text-[#0099ff]' : 'text-[#009900]'} font-medium`}>
+                  <div>{message.sender === 'user' ? 'You' : 'Assistant'}</div>
                 </div>
-              )}
-              {!items.length && <div className="mb-4">awaiting connection...</div>}
-              {items.map((conversationItem) => (
-                <div className="relative flex gap-4 mb-4 group" key={conversationItem.id}>
-                  <div
-                    className={`relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${
-                      conversationItem.role === 'user' ? 'text-[#0099ff]' : 'text-[#009900]'
-                    }`}
-                  >
-                    <div>
-                      {(conversationItem.role || conversationItem.type).replaceAll('_', ' ')}
-                    </div>
-                    <div
-                      className="absolute top-0 -right-5 bg-gray-400 text-white flex rounded-full p-0.5 cursor-pointer hidden group-hover:flex hover:bg-gray-600"
-                      onClick={() => deleteConversationItem(conversationItem.id)}
-                    >
-                      <X className="stroke-current w-3 h-3" />
-                    </div>
-                  </div>
-                  <div className="text-[#18181b] overflow-hidden break-words">
-                    {/* Tool response */}
-                    {conversationItem.type === 'function_call_output' && (
-                      <div>{conversationItem.formatted.output}</div>
-                    )}
-                    {/* Tool call */}
-                    {conversationItem.formatted.tool && (
-                      <div>
-                        {conversationItem.formatted.tool.name}(
-                        {conversationItem.formatted.tool.arguments})
-                      </div>
-                    )}
-                    {!conversationItem.formatted.tool && conversationItem.role === 'user' && (
-                      <div>
-                        {conversationItem.formatted.transcript ||
-                          (conversationItem.formatted.audio?.length
-                            ? '(awaiting transcript)'
-                            : conversationItem.formatted.text || '(item sent)')}
-                      </div>
-                    )}
-                    {!conversationItem.formatted.tool && conversationItem.role === 'assistant' && (
-                      <div>{getItemText(conversationItem) || '(truncated)'}</div>
-                    )}
-                    {audioFiles[conversationItem.id] && conversationItem.role === 'assistant' && (
-                      <audio
-                        src={audioFiles[conversationItem.id].url}
-                        controls
-                        className="pt-3"
-                      />
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-  
-          {/* Actions */}
-          <div className="flex-grow-0 flex-shrink-0 flex items-center justify-center gap-4">
-            <Button
-              label={isConnected ? 'disconnect' : 'connect'}
-              iconPosition={isConnected ? 'end' : 'start'}
-              icon={isConnected ? X : Zap}
-              buttonStyle={isConnected ? 'regular' : 'action'}
-              onClick={isConnected ? disconnectConversation : () => connectConversation(false)}
-            />
-            {window.innerWidth > 768 && <div className="flex-grow" />}
-            {window.innerWidth > 768 && (
-              <div>
-                <div className="flex p-1 rounded-lg z-10 gap-0.5">
-                  <div className="relative flex items-center h-10 w-24 gap-1 text-[#0099ff]">
-                    <canvas ref={clientCanvasRef} className="w-full h-full text-current" />
-                  </div>
-                  <div className="relative flex items-center h-10 w-24 gap-1 text-[#009900]">
-                    <canvas ref={serverCanvasRef} className="w-full h-full text-current" />
-                  </div>
+                <div className="text-[#18181b] overflow-hidden break-words">
+                  {message.message}
                 </div>
               </div>
-            )}
-            <div className="flex-grow" />
-            <div className="flex flex-col">
-              <Button
-                label="Settings"
-                iconPosition="start"
-                icon={Edit}
-                buttonStyle="action"
-                onClick={() => setShowSettings(!showSettings)}
-              />
-              {showSettings && (
-                <div className="flex flex-col mt-2">
-                  <Button
-                    label="Clear and start new"
-                    iconPosition="start"
-                    icon={X}
-                    buttonStyle="alert"
-                    onClick={clearData}
-                  />
-                  <Button
-                    label="Copy conversation"
-                    iconPosition="start"
-                    icon={Zap}
-                    buttonStyle="action"
-                    className="mt-2"
-                    onClick={copyConversation}
-                  />
+            ))}
+          </div>
+        )}
+        {items.length && <div className="h-3">Current conversation:</div>}
+        {items.map((conversationItem) => (
+          <div className="relative flex gap-4 mb-4 group" key={conversationItem.id}>
+            <div
+              className={`relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${conversationItem.role === 'user' ? 'text-[#0099ff]' : 'text-[#009900]'
+                }`}
+            >
+              <div>
+                {(conversationItem.role || conversationItem.type).replaceAll('_', ' ')}
+              </div>
+              <div
+                className="absolute top-0 -right-5 bg-gray-400 text-white flex rounded-full p-0.5 cursor-pointer hidden group-hover:flex hover:bg-gray-600"
+                onClick={() => deleteConversationItem(conversationItem.id)}
+              >
+                <X className="stroke-current w-3 h-3" />
+              </div>
+            </div>
+            <div className="text-[#18181b] overflow-hidden break-words">
+              {/* Tool response */}
+              {conversationItem.type === 'function_call_output' && (
+                <div>{conversationItem.formatted.output}</div>
+              )}
+              {/* Tool call */}
+              {conversationItem.formatted.tool && (
+                <div>
+                  {conversationItem.formatted.tool.name}(
+                  {conversationItem.formatted.tool.arguments})
                 </div>
               )}
+              {!conversationItem.formatted.tool && conversationItem.role === 'user' && (
+                <div>
+                  {conversationItem.formatted.transcript ||
+                    (conversationItem.formatted.audio?.length
+                      ? '(awaiting transcript)'
+                      : conversationItem.formatted.text || '(item sent)')}
+                </div>
+              )}
+              {!conversationItem.formatted.tool && conversationItem.role === 'assistant' && (
+                <div>{getItemText(conversationItem) || '(truncated)'}</div>
+              )}
+              {audioFiles[conversationItem.id] && conversationItem.role === 'assistant' && (
+                <audio
+                  src={audioFiles[conversationItem.id].url}
+                  controls
+                  className="pt-3"
+                />
+              )}
             </div>
-            <div />
           </div>
-        </div>
-  
-        {/* Mermaid Graph */}
-        {window.innerWidth > 768 && (
+        ))}
+      </div>
+
+      {/* Mermaid Graph */}
+      <div className="w-1/2 pl-4 overflow-y-auto fixed right-0 top-20 bottom-0 bg-white">
+        {mermaidGraph && window.innerWidth > 768 && (
           <pre id="mermaid-graph" className="mermaid w-full">
             {mermaidGraph}
           </pre>
         )}
       </div>
+
+      {/* Action Buttons */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex items-center justify-center gap-4 p-4">
+        <Button
+          label={isConnected ? 'disconnect' : 'connect'}
+          iconPosition={isConnected ? 'end' : 'start'}
+          icon={isConnected ? X : Zap}
+          buttonStyle={isConnected ? 'regular' : 'action'}
+          onClick={isConnected ? disconnectConversation : () => connectConversation(false)}
+        />
+        {window.innerWidth > 768 && <div className="flex-grow" />}
+        {window.innerWidth > 768 && (
+          <div>
+            <div className="flex p-1 rounded-lg z-10 gap-0.5">
+              <div className="relative flex items-center h-10 w-24 gap-1 text-[#0099ff]">
+                <canvas ref={clientCanvasRef} className="w-full h-full text-current" />
+              </div>
+              <div className="relative flex items-center h-10 w-24 gap-1 text-[#009900]">
+                <canvas ref={serverCanvasRef} className="w-full h-full text-current" />
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="flex-grow" />
+        <div className="relative">
+          <Button
+            label="Options"
+            iconPosition="start"
+            icon={Settings}
+            buttonStyle="action"
+            className=""
+            onClick={() => setShowSettings(!showSettings)}
+          />
+          {showSettings && (
+            <div className="absolute bottom-full mb-2 right-0 flex flex-col bg-white shadow-lg rounded-lg p-2 min-w-[200px]">
+              <Button
+                label="Open in ChatGPT"
+                iconPosition="start"
+                icon={MessageCircle}
+                buttonStyle="action"
+                onClick={openInChatGPT}
+              />
+              <Button
+                label="Copy Transcript"
+                iconPosition="start"
+                icon={Copy}
+                buttonStyle="action"
+                className="mt-2"
+                onClick={copyConversation}
+              />
+            </div>
+          )}
+        </div>
+        <div />
+      </div>
     </div>
   );
-
-  // return (
-  //   <div data-component="ConsolePage">
-  //     <div className="content-top">
-  //       <div className="content-title">
-  //         <img src="/openai-logomark.svg" alt="" />
-  //         {window.innerWidth > 768 && <span>realtime console</span>}
-  //       </div>
-  //       <div className="content-api-key">
-  //         <Button
-  //           icon={Edit}
-  //           iconPosition="end"
-  //           buttonStyle="flush"
-  //           label={`OpenAI: ${apiKey.slice(0, 3)}...`}
-  //           onClick={() => resetAPIKey()}
-  //         />
-  //       </div>
-  //       <div className="content-api-key">
-  //         <Button
-  //           icon={Edit}
-  //           iconPosition="end"
-  //           buttonStyle="flush"
-  //           label={`Tavily: ${tavilyApiKey.slice(0, 3)}...`}
-  //           onClick={() => resetTavilyApiKey()}
-  //         />
-  //       </div>
-  //     </div>
-  //     <div className="content-main">
-  //       <div className="content-logs">
-  //         <div className="content-block events">
-  //           <div className="content-block-title">conversation</div>
-  //           <div className="content-block-body" data-conversation-content>
-  //             {messageListCopy.length && <div style={{ marginBottom: '8px', marginTop: '8px' }}>Previous conversation:</div>}
-  //             {messageListCopy.length && <div style={{ marginBottom: '32px' }}>
-  //               {messageListCopy.map((message: { id: string, sender: string, message: string }) => (
-  //                 <div className="conversation-item" key={message.id}>
-  //                   <div className={`speaker ${message.sender || ''}`}>
-  //                     <div>
-  //                       {message.sender}
-  //                     </div>
-  //                   </div>
-  //                   <div className={`speaker-content`}>
-  //                     {message.message}
-  //                   </div>
-  //                 </div>
-  //               ))}
-  //             </div>}
-  //             {!items.length && <div style={{ marginBottom: '16px' }}>awaiting connection...</div>}
-  //             {items.map((conversationItem, i) => {
-  //               return (
-  //                 <div className="conversation-item" key={conversationItem.id}>
-  //                   <div className={`speaker ${conversationItem.role || ''}`}>
-  //                     <div>
-  //                       {(
-  //                         conversationItem.role || conversationItem.type
-  //                       ).replaceAll('_', ' ')}
-  //                     </div>
-  //                     <div
-  //                       className="close"
-  //                       onClick={() =>
-  //                         deleteConversationItem(conversationItem.id)
-  //                       }
-  //                     >
-  //                       <X />
-  //                     </div>
-  //                   </div>
-  //                   <div className={`speaker-content`}>
-  //                     {/* tool response */}
-  //                     {conversationItem.type === 'function_call_output' && (
-  //                       <div>{conversationItem.formatted.output}</div>
-  //                     )}
-  //                     {/* tool call */}
-  //                     {!!conversationItem.formatted.tool && (
-  //                       <div>
-  //                         {conversationItem.formatted.tool.name}(
-  //                         {conversationItem.formatted.tool.arguments})
-  //                       </div>
-  //                     )}
-  //                     {!conversationItem.formatted.tool &&
-  //                       conversationItem.role === 'user' && (
-  //                         <div>
-  //                           {conversationItem.formatted.transcript ||
-  //                             (conversationItem.formatted.audio?.length
-  //                               ? '(awaiting transcript)'
-  //                               : conversationItem.formatted.text ||
-  //                               '(item sent)')}
-  //                         </div>
-  //                       )}
-  //                     {!conversationItem.formatted.tool &&
-  //                       conversationItem.role === 'assistant' && (
-  //                         <div>
-  //                           {getItemText(conversationItem) || '(truncated)'}
-  //                         </div>
-  //                       )}
-
-  //                     {audioFiles[conversationItem.id] && conversationItem.role === 'assistant' && (
-  //                       <audio
-  //                         src={audioFiles[conversationItem.id].url}
-  //                         controls
-  //                         style={{ paddingTop: '12px' }}
-  //                       />
-  //                     )}
-  //                   </div>
-  //                 </div>
-  //               );
-  //             })}
-  //           </div>
-  //         </div>
-  //         <div className="content-actions">
-  //           <Button
-  //             label={isConnected ? 'disconnect' : 'connect'}
-  //             iconPosition={isConnected ? 'end' : 'start'}
-  //             icon={isConnected ? X : Zap}
-  //             buttonStyle={isConnected ? 'regular' : 'action'}
-  //             onClick={
-  //               isConnected ? disconnectConversation : () => connectConversation(false)
-  //             }
-  //           />
-  //           {window.innerWidth > 768 && <div className="spacer" />}
-  //           {window.innerWidth > 768 && (
-  //             <div>
-  //               <div className="visualization">
-  //                 <div className="visualization-entry client">
-  //                   <canvas ref={clientCanvasRef} />
-  //                 </div>
-  //                 <div className="visualization-entry server">
-  //                   <canvas ref={serverCanvasRef} />
-  //                 </div>
-  //               </div>
-  //             </div>
-  //           )}
-  //           <div className="spacer" />
-  //           <div style={{ display: 'flex', flexDirection: 'column' }}>
-  //             <Button
-  //               label="Settings"
-  //               iconPosition="start"
-  //               icon={Edit}
-  //               buttonStyle="action"
-  //               onClick={() => setShowSettings(!showSettings)}
-  //             />
-  //             {showSettings && (
-  //               <div style={{ display: 'flex', flexDirection: 'column', marginTop: '8px' }}>
-  //                 <Button
-  //                   label="Clear and start new"
-  //                   iconPosition="start"
-  //                   icon={X}
-  //                   buttonStyle="alert"
-  //                   onClick={clearData}
-  //                 />
-  //                 <Button
-  //                   label="Copy conversation"
-  //                   iconPosition="start"
-  //                   icon={Zap}
-  //                   buttonStyle="action"
-  //                   style={{ marginTop: '8px' }}
-  //                   onClick={copyConversation}
-  //                 />
-  //               </div>
-  //             )}
-  //           </div>
-  //           <div />
-  //         </div>
-  //       </div>
-  //       {window.innerWidth > 768 && (
-  //           <pre id="mermaid-graph" className="mermaid" style={{ width: '100%' }}>
-  //             {mermaidGraph}
-  //           </pre>
-  //           // <div className="content-image">
-  //           //   {mostRecentImage && (
-  //           //     <div className="image-container">
-  //           //       <img src={mostRecentImage} alt="Most Recent" />
-  //           //     </div>
-  //           //   )}
-  //           // </div>
-  //         )}
-
-  //     </div>
-  //   </div>
-  // );
 }
