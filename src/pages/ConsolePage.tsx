@@ -106,8 +106,11 @@ export function ConsolePage() {
   const [showSettings, setShowSettings] = useState(false);
 
   const [mermaidGraph, setMermaidGraph] = useLocalStorage<string>(`${topicUuid}::mermaidGraph`, '');
-  const [lastMermaidGraphMessageId, setLastMermaidGraphMessageId] = useState<string | null>(null);
   const [isGeneratingMermaidGraph, setIsGeneratingMermaidGraph] = useState(false);
+
+  const [lastGeneratedFollowUpsAtItemIdx, setLastGeneratedFollowUpsAtItemIdx] = useState(0);
+  const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
+
 
   const getItemRole = (item: ItemType | any) => {
     const role = item.role || item.sender;
@@ -183,23 +186,25 @@ export function ConsolePage() {
     try {
       const questions = JSON.parse(content);
       console.log('questions', { questions });
+      if (Array.isArray(questions)) {
+        setFollowUpQuestions(questions);
+      }
     } catch (e) {
       console.error('Error parsing JSON:', e);
     }
   }
 
-  const [lastGeneratedQuestionsCount, setLastGeneratedQuestionsCount] = useState(0);
 
-  useEffect(() => {
-    // if (items.length >= 5) {
-    //   const last = items[items.length-1];
-    //   if (last.role === 'assistant' && (last as any).status === 'completed' && items.length > lastGeneratedQuestionsCount){
-    //     setLastGeneratedQuestionsCount(items.length);
-    //     generateFollowUpQuestions();
-    //   }
-    // }
+  // useEffect(() => {
+  //   if (items.length >= 5) {
+  //     const last = items[items.length - 1];
+  //     if (last.role === 'assistant' && (last as any).status === 'completed' && items.length > lastGeneratedFollowUpsAtItemIdx) {
+  //       setLastGeneratedFollowUpsAtItemIdx(items.length);
+  //       generateFollowUpQuestions();
+  //     }
+  //   }
 
-  }, [messageList])
+  // }, [messageList])
 
   const generateMermaidGraph = async () => {
     if (isGeneratingMermaidGraph) return;
@@ -242,18 +247,10 @@ export function ConsolePage() {
     }, 500);
   };
 
-  const drawDiagram = async function () {
-    const mermaidElement = document.getElementById('mermaid-graph');
-    if (!mermaidElement) return;
-    const { svg } = await mermaid.render('mermaid-graph', mermaidGraph);
-    console.log('svg', { svg, mermaidElement });
-    mermaidElement!.innerHTML = svg;
-  };
-
   useEffect(() => {
-    console.log('refreshing mermaidGraph', { mermaidGraph });
+    // console.log('refreshing mermaidGraph', { mermaidGraph });
     const mermaidElement = document.getElementById('mermaid-graph');
-    console.log('mermaidElement', { mermaidElement });
+    // console.log('mermaidElement', { mermaidElement });
     if (mermaidElement) {
       try {
         mermaid.run({ nodes: [mermaidElement], suppressErrors: true, });
@@ -261,9 +258,8 @@ export function ConsolePage() {
         console.error('Error running mermaid:', e);
       }
     } else {
-      console.warn('Mermaid graph element not found');
+      // console.warn('Mermaid graph element not found');
     }
-    // drawDiagram();
   }, [mermaidGraph]);
 
   const [lastGeneratedCount, setLastGeneratedCount] = useState(0);
@@ -809,7 +805,7 @@ export function ConsolePage() {
 
         {/* Most recent session conversation */}
         {items.length && <div className="mb-4 mt-2 text-base text-gray-500">Most Recent:</div>}
-        {items.map((conversationItem) => (
+        {items.map((conversationItem, index) => (
           <div className="relative flex gap-4 mb-4 group" key={conversationItem.id}>
             <div
               className={`
@@ -855,6 +851,21 @@ export function ConsolePage() {
                   controls
                   className="pt-3"
                 />
+              )}
+              {conversationItem.role === 'assistant' && followUpQuestions.length > 0 && index === items.length - 1 && (
+                <div className="flex gap-2 mt-2 mb-40">
+                  {followUpQuestions.slice(0, 3).map((question, idx) => (
+                    <button
+                      key={idx}
+                      className="bg-blue-500 text-white px-2 py-1 rounded"
+                      onClick={() => {
+                        // handleFollowUpQuestionClick(question)
+                      }}
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>
