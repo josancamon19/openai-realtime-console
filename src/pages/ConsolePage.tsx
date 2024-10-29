@@ -31,7 +31,6 @@ interface RealtimeEvent {
 
 export function ConsolePage() {
   const apiKey = (localStorage.getItem('tmp::voice_api_key') || '').replaceAll('"', '');
-  console.log('apiKey', { apiKey });
 
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(window.location.search);
