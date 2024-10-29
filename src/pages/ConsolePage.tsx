@@ -191,7 +191,11 @@ export function ConsolePage() {
     setIsGeneratingMermaidGraph(true);
 
     const openai = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
-
+    // ${mermaidGraph ? `Make sure to use as the starting point, the previous mermaid graph and update it with any new information (if any):
+    // \`\`\`
+    // ${mermaidGraph}
+    // \`\`\`
+    // ` : ''}
     const completion = await openai.chat.completions.create({
       messages: [{
         role: "system", content: `
@@ -200,16 +204,14 @@ export function ConsolePage() {
 
         Make sure the chart shows the relationships between all the concepts learned. The simpler the better.
         Do not expand the graph beyond things not mentioned in the conversation.
+        
+        Conversation:
+        \`\`\`
+        ${messageList.map((message) => `${message.sender === 'user' ? 'Student' : 'Teacher'}: ${message.message}`).join('\n')}
+        \`\`\`
 
-        \`\`\`
-        ${messageList.map((message) => `${message.sender}: ${message.message}`).join('\n')}
-        \`\`\`
-
-        ${mermaidGraph ? `Make sure to use as the starting point, the previous mermaid graph and update it with any new information (if any):
-        \`\`\`
-        ${mermaidGraph}
-        \`\`\`
-        ` : ''}
+        Make sure to include in the graph the relationships between the concepts.
+        Example: "Traditional_Practices -->|Example| Tea_Ceremonies"
         ` }],
       model: "gpt-4o",
     });
@@ -222,7 +224,7 @@ export function ConsolePage() {
     setTimeout(() => {
       setMermaidGraph(extractedContent);
       setIsGeneratingMermaidGraph(false);
-    }, 1000);
+    }, 500);
   };
 
   const drawDiagram = async function () {
@@ -249,9 +251,12 @@ export function ConsolePage() {
     // drawDiagram();
   }, [mermaidGraph]);
 
+  const [lastGeneratedCount, setLastGeneratedCount] = useState(0);
+
   useEffect(() => {
-    if (topic && messageList.length % 5 === 0 && messageList.length > 0 && window.innerWidth > 768) {
+    if (topic && messageList.length > 0 && messageList.length % 5 === 0 && window.innerWidth > 768 && messageList.length > lastGeneratedCount) {
       generateMermaidGraph();
+      setLastGeneratedCount(messageList.length);
     }
   }, [messageList]);
 
@@ -762,7 +767,7 @@ export function ConsolePage() {
   return (
     <div data-component="ConsolePage" className="font-roboto-mono font-normal text-xs h-full flex flex-col overflow-hidden mx-2">
       {/* Header */}
-      <Header 
+      <Header
         title={topic?.title || ''}
         onNavigateBack={() => navigate('/')}
       />
