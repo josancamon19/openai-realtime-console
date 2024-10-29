@@ -157,16 +157,16 @@ export function ConsolePage() {
         role: "system", content: `
         You will be given an on-going conversation between a teacher and a student.
 
-        Your job is to ask as a student, and generate 3 follow up questions that can be asked to the teacher for better understanding of the topic.
+        Your job is to ask as a student, and generate 3 simple and short follow up questions that can be asked to the teacher for better understanding of the topic.
 
-        Your questions should be concise and to the point.
+        Your questions should be short, concise and to the point.
 
         Conversation:
         \`\`\`
         ${messageList.map((message) => `${message.sender === 'user' ? 'Student' : 'Teacher'}: ${message.message}`).join('\n')}
         \`\`\`
 
-        Your response should be in the following JSON format:
+        Your response should be in the following JSON format (an array of strings):
         \`\`\`
         [
           "Question 1",
@@ -174,6 +174,8 @@ export function ConsolePage() {
           "Question 3"
         ]
         \`\`\`
+
+        If there are no questions worth asking as follow up by the student, output an empty array.
         ` }],
       model: "gpt-4o",
     });
@@ -185,6 +187,19 @@ export function ConsolePage() {
       console.error('Error parsing JSON:', e);
     }
   }
+
+  const [lastGeneratedQuestionsCount, setLastGeneratedQuestionsCount] = useState(0);
+
+  useEffect(() => {
+    // if (items.length >= 5) {
+    //   const last = items[items.length-1];
+    //   if (last.role === 'assistant' && (last as any).status === 'completed' && items.length > lastGeneratedQuestionsCount){
+    //     setLastGeneratedQuestionsCount(items.length);
+    //     generateFollowUpQuestions();
+    //   }
+    // }
+
+  }, [messageList])
 
   const generateMermaidGraph = async () => {
     if (isGeneratingMermaidGraph) return;
