@@ -169,13 +169,15 @@ export function ConsolePage() {
         ${messageList.map((message) => `${message.sender === 'user' ? 'Student' : 'Teacher'}: ${message.message}`).join('\n')}
         \`\`\`
 
-        Your response should be in the following JSON format (an array of strings):
+        Your response should be in the following JSON format:
         \`\`\`
-        [
-          "Question 1",
-          "Question 2",
-          "Question 3"
-        ]
+        {
+          "questions": [
+            "Question 1",
+            "Question 2",
+            "Question 3"
+          ]
+        }
         \`\`\`
 
         If there are no questions worth asking as follow up by the student, output an empty array.
@@ -184,27 +186,30 @@ export function ConsolePage() {
     });
     const content = completion.choices[0].message.content!;
     try {
-      const questions = JSON.parse(content);
-      console.log('questions', { questions });
-      if (Array.isArray(questions)) {
-        setFollowUpQuestions(questions);
-      }
+      console.log('questions', { content });
+      const questions = JSON.parse(content).questions || [];
+      setFollowUpQuestions(questions);
     } catch (e) {
       console.error('Error parsing JSON:', e);
     }
   }
 
 
-  // useEffect(() => {
-  //   if (items.length >= 5) {
-  //     const last = items[items.length - 1];
-  //     if (last.role === 'assistant' && (last as any).status === 'completed' && items.length > lastGeneratedFollowUpsAtItemIdx) {
-  //       setLastGeneratedFollowUpsAtItemIdx(items.length);
-  //       generateFollowUpQuestions();
-  //     }
-  //   }
-
-  // }, [messageList])
+  useEffect(() => {
+    if (items.length >= 2) {
+      const last = items[items.length - 1];
+      const lastIsAssistant = last.role === 'assistant';
+      const lastIsCompleted = (last as any).status === 'completed';
+      console.log('lastIsAssistant', { lastIsAssistant, lastIsCompleted });
+      if (lastIsAssistant && lastIsCompleted && items.length > lastGeneratedFollowUpsAtItemIdx) {
+        console.log('generating follow up questions');
+        setLastGeneratedFollowUpsAtItemIdx(items.length);
+        generateFollowUpQuestions();
+      } else {
+        setFollowUpQuestions([]);
+      }
+    }
+  }, [items])
 
   const generateMermaidGraph = async () => {
     if (isGeneratingMermaidGraph) return;
@@ -853,13 +858,19 @@ export function ConsolePage() {
                 />
               )}
               {conversationItem.role === 'assistant' && followUpQuestions.length > 0 && index === items.length - 1 && (
-                <div className="flex gap-2 mt-2 mb-40">
+                <div className="flex gap-4 mt-4 mb-40 mx-4">
                   {followUpQuestions.slice(0, 3).map((question, idx) => (
                     <button
                       key={idx}
-                      className="bg-blue-500 text-white px-2 py-1 rounded"
+                      className="bg-gray-500 text-white px-4 py-1 rounded-full transition-transform transform hover:scale-105"
                       onClick={() => {
-                        // handleFollowUpQuestionClick(question)
+                        wavStreamPlayerRef.current?.interrupt();
+                        clientRef.current?.sendUserMessageContent([
+                          {
+                            type: `input_text`,
+                            text: question,
+                          },
+                        ])
                       }}
                     >
                       {question}
