@@ -30,7 +30,8 @@ interface RealtimeEvent {
 }
 
 export function ConsolePage() {
-  const apiKey = localStorage.getItem('tmp::voice_api_key') || '';
+  const apiKey = (localStorage.getItem('tmp::voice_api_key') || '').replaceAll('"', '');
+  console.log('apiKey', { apiKey });
 
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(window.location.search);
@@ -68,6 +69,7 @@ export function ConsolePage() {
     new RealtimeClient({
       apiKey: apiKey,
       dangerouslyAllowAPIKeyInBrowser: true,
+      // debug: true,
     })
   );
 
@@ -147,6 +149,43 @@ export function ConsolePage() {
   //   setMostRecentImage(image.data[0].url!);
   //   setIsGeneratingImage(false);
   // };
+
+  const generateFollowUpQuestions = async () => {
+    const openai = new OpenAI({ apiKey: apiKey, dangerouslyAllowBrowser: true });
+    const completion = await openai.chat.completions.create({
+      response_format: { type: 'json_object' },
+      messages: [{
+        role: "system", content: `
+        You will be given an on-going conversation between a teacher and a student.
+
+        Your job is to ask as a student, and generate 3 follow up questions that can be asked to the teacher for better understanding of the topic.
+
+        Your questions should be concise and to the point.
+
+        Conversation:
+        \`\`\`
+        ${messageList.map((message) => `${message.sender === 'user' ? 'Student' : 'Teacher'}: ${message.message}`).join('\n')}
+        \`\`\`
+
+        Your response should be in the following JSON format:
+        \`\`\`
+        [
+          "Question 1",
+          "Question 2",
+          "Question 3"
+        ]
+        \`\`\`
+        ` }],
+      model: "gpt-4o",
+    });
+    const content = completion.choices[0].message.content!;
+    try {
+      const questions = JSON.parse(content);
+      console.log('questions', { questions });
+    } catch (e) {
+      console.error('Error parsing JSON:', e);
+    }
+  }
 
   const generateMermaidGraph = async () => {
     if (isGeneratingMermaidGraph) return;
