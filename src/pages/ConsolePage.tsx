@@ -10,13 +10,14 @@ import { WavRenderer } from '../utils/wav_renderer';
 import { X, Edit, Zap, ArrowUp, ArrowDown, MessageCircle, Copy, Settings, RefreshCw } from 'react-feather';
 import { Button } from '../components/button/Button';
 
-// import { clearInt16Arrays, getAllInt16Arrays, getInt16Array, upsertInt16Array } from '../utils/db.js';
 import { tavily } from '@tavily/core';
 import { useNavigate } from 'react-router-dom';
 
 import OpenAI from 'openai';
 import mermaid from 'mermaid';
 import { ZoomableDiv } from '../components/ZoomableDiv';
+import { useLocalStorage } from '../utils/local_storage_hook';
+import Header from '../components/Header';
 
 /**
  * Type for all event logs
@@ -28,33 +29,8 @@ interface RealtimeEvent {
   event: { [key: string]: any };
 }
 
-function useLocalStorage<T>(key: string, initialValue: T) {
-  const [storedValue, setStoredValue] = useState<T>(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      console.error('Error reading localStorage key:', key, error);
-      return initialValue;
-    }
-  });
-
-  const setValue = (value: T | ((val: T) => T)) => {
-    try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
-      window.localStorage.setItem(key, JSON.stringify(valueToStore));
-    } catch (error) {
-      console.error('Error setting localStorage key:', key, error);
-    }
-  };
-
-  return [storedValue, setValue] as const;
-}
-
 export function ConsolePage() {
   const apiKey = localStorage.getItem('tmp::voice_api_key') || '';
-  const tavilyApiKey = localStorage.getItem('tmp::tvly_api_key') || '';
 
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(window.location.search);
@@ -235,25 +211,11 @@ export function ConsolePage() {
     // drawDiagram();
   }, [mermaidGraph]);
 
-
-  // useEffect(() => {
-  //   try {
-  //     mermaid.run({ nodes: [document.getElementById('mermaid-graph')!] });
-  //   } catch (e) {
-  //     console.log('Error running mermaid:', e);
-  //   }
-  // }, []);
-
   useEffect(() => {
     if (topic && messageList.length % 5 === 0 && messageList.length > 0 && window.innerWidth > 768) {
       generateMermaidGraph();
     }
   }, [messageList]);
-
-  // useEffect(() => {
-  //   if (!topic) return;
-  //   generateMermaidGraph();
-  // }, [topic]);
 
 
   const getItemText = (item: ItemType) => {
@@ -265,25 +227,6 @@ export function ConsolePage() {
     }
     return text;
   }
-
-  /**
-   * When you click the API key
-   */
-  const resetAPIKey = useCallback(() => {
-    const apiKey = prompt('OpenAI API Key');
-    if (apiKey !== null) {
-      localStorage.setItem('tmp::voice_api_key', apiKey);
-      window.location.reload();
-    }
-  }, []);
-
-  const resetTavilyApiKey = useCallback(() => {
-    const apiKey = prompt('Tavily API Key');
-    if (apiKey !== null) {
-      localStorage.setItem('tmp::tvly_api_key', apiKey);
-      window.location.reload();
-    }
-  }, []);
 
   /**
  * Utility for formatting the timing of logs
@@ -596,6 +539,7 @@ export function ConsolePage() {
       async ({ search }: { [search: string]: any }) => {
         console.log('search_web', { search });
         try {
+          const tavilyApiKey = localStorage.getItem('tmp::tvly_api_key') || '';
           const tvly = tavily({ apiKey: tavilyApiKey });
           const answer = await tvly.searchQNA(search, {
             searchDepth: 'basic',
@@ -780,30 +724,10 @@ export function ConsolePage() {
   return (
     <div data-component="ConsolePage" className="font-roboto-mono font-normal text-xs h-full flex flex-col overflow-hidden mx-2">
       {/* Header */}
-      <div className="items-center p-2 px-4 min-h-[40px] fixed top-0 left-0 right-0 bg-white z-50 border-b border-gray-300 flex-grow flex mx-4 overflow-hidden mb-6">
-        <div className="flex-grow flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-          <img src="/openai-logomark.svg" alt="" className="w-6 h-6" />
-          {window.innerWidth > 768 && <span className='text-lg line-clamp-1'>{topic?.title ?? 'Learning Dashboard'}</span>}
-        </div>
-        <div>
-          <Button
-            icon={Edit}
-            iconPosition="end"
-            buttonStyle="flush"
-            label={`OpenAI: ${apiKey.slice(0, 3)}...`}
-            onClick={() => resetAPIKey()}
-          />
-        </div>
-        <div>
-          <Button
-            icon={Edit}
-            iconPosition="end"
-            buttonStyle="flush"
-            label={`Tavily: ${tavilyApiKey.slice(0, 3)}...`}
-            onClick={() => resetTavilyApiKey()}
-          />
-        </div>
-      </div>
+      <Header 
+        title={topic?.title || ''}
+        onNavigateBack={() => navigate('/')}
+      />
 
       {/* Conversation */}
       <div className={`flex-grow flex flex-col ${window.innerWidth < 768 ? 'w-full' : 'w-1/2 border-r border-gray-300'} mt-16 pl-2 pr-8  relative max-h-full mb-20 text-[#8e8e8e] pt-1 pb-2 leading-[1.2] overflow-auto`} data-conversation-content>
@@ -831,7 +755,7 @@ export function ConsolePage() {
           <div className="relative flex gap-4 mb-4 group" key={conversationItem.id}>
             <div
               className={`
-                relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${conversationItem.role === 'user' ? 'text-[#0099ff]' : conversationItem.role === 'assistant'? 'text-[#009900]': ''}
+                relative text-left gap-4 w-20 flex-shrink-0 mr-4 ${conversationItem.role === 'user' ? 'text-[#0099ff]' : conversationItem.role === 'assistant' ? 'text-[#009900]' : ''}
                 `}
             >
               <div className='text-sm'>
