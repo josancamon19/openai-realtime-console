@@ -15,10 +15,10 @@ This is a customized and improved version of the openai [realtime dashboard](htt
 <br />
 
 
-<div style="display: flex; justify-content: space-between;">
-<img src="readme/image1.png" alt="Image 1" style="width: 50%;" />
-    <img src="readme/image3.png" alt="Image 3" style="width: 50%;" />
+<div style="display: flex; justify-content: center;">
+  <img src="readme/image1.png" alt="Image 1" style="width: 40%;" />
 </div>
+<img src="readme/image3.png" alt="Image 3" style="width: 100%;" />
 <img src="readme/image2.png" alt="Image 2" style="width: 100%;" />
 
 
